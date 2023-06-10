@@ -9,7 +9,6 @@ from datetime import datetime
 import logging
 import torch
 from multiprocessing import cpu_count
-from tqdm import tqdm
 
 model_name = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
@@ -19,7 +18,7 @@ args = ArgsParser.parse_arguments()
 start_time = datetime.now()
 args.output_dir = os.path.join("logs", args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
 
-setup_logging(args.output_dir,"info")
+setup_logging(args.output_dir, "info")
 make_deterministic(args.seed)
 logging.info(f"Arguments: {args}")
 logging.info(f"The outputs are being saved in {args.output_dir}")
@@ -27,10 +26,14 @@ logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
 
 
 def preprocess_function(examples):
-    return tokenizer(examples["sentence"], examples["context"], truncation=True)
+    return tokenizer(examples["sentence"], examples["context"], truncation=True, padding="max_length")
 
 
-def prepare_dataset(dataset_path=None, num_train_examples=3000, num_val_examples=500, num_test_example=500, save_flag=False):
+def prepare_dataset(dataset_path=None,
+                    num_train_examples=3000,
+                    num_val_examples=500,
+                    num_test_example=500,
+                    save_flag=False):
     logging.info("##### PREPARING TRAIN, VAL, TEST DATASETS #####")
     train_dataset, val_dataset, test_dataset = None, None, None
 
@@ -83,7 +86,7 @@ def prepare_dataset(dataset_path=None, num_train_examples=3000, num_val_examples
         if save_flag:
             for data_type, dataset in zip(["train", "validation", "test"], [train_dataset, val_dataset, test_dataset]):
                 data_path = os.path.join(dataset_path, data_type)
-                logging.ino(f"Saving dataset {data_type.upper()} split to {data_path}")
+                logging.info(f"Saving dataset {data_type.upper()} split to {data_path}")
                 dataset.save_to_disk(data_path, num_proc=cpu_count())
     return train_dataset, val_dataset, test_dataset
 
@@ -97,10 +100,10 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
     logging.info("|-------------------------------------------------------------------------------------------|")
     dataset_train, dataset_val, dataset_test = prepare_dataset(args.dataset_path,
-                                                              args.num_train_examples,
-                                                              args.num_val_examples,
-                                                              args.num_test_examples, 
-                                                              args.save_dataset_on_disk)
+                                                               args.num_train_examples,
+                                                               args.num_val_examples,
+                                                               args.num_test_examples,
+                                                               args.save_dataset_on_disk)
 
     print(dataset_train[0])
 

@@ -220,12 +220,12 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
 
     if console is not None:
         console_handler = logging.StreamHandler()
-        if console == "debug": 
-          console_handler.setLevel(logging.DEBUG)
-          datasets.utils.logging.set_verbosity_debug()
-        if console == "info":  
-          console_handler.setLevel(logging.INFO)
-          datasets.utils.logging.set_verbosity_info()
+        if console == "debug":
+            console_handler.setLevel(logging.DEBUG)
+            datasets.utils.logging.set_verbosity_debug()
+        if console == "info":
+            console_handler.setLevel(logging.INFO)
+            datasets.utils.logging.set_verbosity_info()
 
         console_handler.setFormatter(base_formatter)
         logger.addHandler(console_handler)
