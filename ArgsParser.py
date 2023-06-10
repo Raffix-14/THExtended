@@ -13,7 +13,9 @@ def parse_arguments():
                         help="If a name is provided, the dataset will be downloaded from HuggingFace. "
                              "If a path is provided, the dataset will be loaded from the specified path.")
     parser.add_argument("--num_train_examples", type=int, default=3000, help="Number of training documents")
-    parser.add_argument("--num_eval_examples", type=int, default=500, help="Number of evaluation documents")
+    parser.add_argument("--num_val_examples", type=int, default=500, help="Number of evaluation documents")
+    parser.add_argument("--num_test_examples", type=int, default=500, help="Number of test documents")
+
     parser.add_argument("--model_name_or_path", type=str, default='bert-base-uncased',
                         help='Path to pretrained encoder model or model identifier from huggingface.co/models')
     parser.add_argument("--output_dir", type=str, default="out_tmp", help="Path to save checkpoints and logs")

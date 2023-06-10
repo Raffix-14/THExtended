@@ -19,6 +19,8 @@ import logging
 import traceback
 import numpy as np
 from os.path import join
+import datasets
+from huggingface_hub.utils import enable_progress_bars
 
 
 def cleaner(dataset, num_samples, seed=42):
@@ -44,7 +46,7 @@ def cleaner(dataset, num_samples, seed=42):
         n_highlight = 0
         # For each hl, check whether to discard it
         for current_h in highlights.sents:
-            if not (len(current_h.text.split(" ")) <= 3 and any(char.isalpha() for char in current_h.text)):
+            if len(current_h.text.split(" ")) > 3 and any(char.isalpha() for char in current_h.text):
                 n_highlight += 1
                 if cleaned_high != "":
                     cleaned_high += "\n"
@@ -195,6 +197,7 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
         info_filename (str): the name of the info file. if None, don't create info file
         debug_filename (str): the name of the debug file. if None, don't create debug file
     """
+    enable_progress_bars()
     if os.path.exists(save_dir):
         raise FileExistsError(f"{save_dir} already exists!")
     os.makedirs(save_dir, exist_ok=True)
@@ -217,8 +220,13 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
 
     if console is not None:
         console_handler = logging.StreamHandler()
-        if console == "debug": console_handler.setLevel(logging.DEBUG)
-        if console == "info":  console_handler.setLevel(logging.INFO)
+        if console == "debug": 
+          console_handler.setLevel(logging.DEBUG)
+          datasets.utils.logging.set_verbosity_debug()
+        if console == "info":  
+          console_handler.setLevel(logging.INFO)
+          datasets.utils.logging.set_verbosity_info()
+
         console_handler.setFormatter(base_formatter)
         logger.addHandler(console_handler)
 
