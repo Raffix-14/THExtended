@@ -19,11 +19,15 @@ import logging
 import traceback
 import numpy as np
 from os.path import join
-import datasets
-from huggingface_hub.utils import enable_progress_bars
+from rouge import Rouge
+from multiprocessing import cpu_count
+import statistics
+from datasets import load_dataset, load_from_disk
+from datasets.utils import logging as loggingDatasets
+from transformers.utils import logging as loggingTransformer
 
 
-def cleaner(dataset, num_samples, seed=42):
+def clean_dataset(dataset, num_samples, seed=42):
     nlp = spacy.load("en_core_web_lg")
     # Shuffle the dataset, so you can be sure you're not selecting the first contiguous data points
     ds = dataset.shuffle(seed=seed)
@@ -92,6 +96,107 @@ def cleaner(dataset, num_samples, seed=42):
         cleaned_ds.append(data_point)
 
     return Dataset.from_pandas(pd.DataFrame(data=cleaned_ds))
+
+
+def prepare_dataset(dataset_path=None,
+                    num_train_examples=3000,
+                    num_val_examples=500,
+                    num_test_example=500,
+                    save_flag=False,
+                    save_dir=None,
+                    seed=42):
+    from DataParser import DataParser
+    train_dataset, val_dataset, test_dataset = None, None, None
+
+    # Check if a path was provided and if a file exists at the path
+    if dataset_path is not None and os.path.isdir(dataset_path):
+        for data_type in ["train", "validation", "test"]:
+            data_path = os.path.join(dataset_path, data_type)
+            try:
+                logging.info(f"Loading {data_type} dataset from {data_path}")
+                if data_type == "train":
+                    train_dataset = load_from_disk(data_path)
+                elif data_type == "validation":
+                    val_dataset = load_from_disk(data_path)
+                elif data_type == "test":
+                    test_dataset = load_from_disk(data_path)
+            except FileNotFoundError:
+                logging.info(f"No dataset {data_type.upper()} split found at {data_path}. Loading default.")
+
+    if train_dataset is None or val_dataset is None or test_dataset is None:
+        logging.info("Loading CNN DailyMail dataset from Hugging Face Hub")
+        raw_dataset = load_dataset("cnn_dailymail", "3.0.0", num_proc=cpu_count())
+
+        # Apply cleaning and parsing steps to training dataset
+        if train_dataset is None:
+            logging.info("Cleaning and parsing TRAIN split")
+            cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples)
+            parser = DataParser(dataset=cleaned_train_dataset)
+            train_dataset = parser()
+
+        # Apply cleaning and parsing steps to validation dataset
+        if val_dataset is None:
+            logging.info("Cleaning and parsing VALIDATION split")
+            cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples)
+            parser = DataParser(dataset=cleaned_val_dataset)
+            val_dataset = parser()
+
+        # Apply cleaning and parsing steps to test dataset
+        if test_dataset is None:
+            logging.info("Cleaning and parsing TEST split")
+            cleaned_test_dataset = clean_dataset(raw_dataset['test'], num_test_example)
+            parser = DataParser(dataset=cleaned_test_dataset, is_test=True)
+            test_dataset = parser()
+
+        # If save_flag is set and a path is provided, save the dataset
+        if save_flag:
+            if dataset_path is None:
+                dataset_path = os.path.join(save_dir, "dataset")
+            if not os.path.exists(dataset_path):
+                logging.debug("Creating folder {dataset_path} to store the dataset splits")
+                os.makedirs(dataset_path, exist_ok=True)
+            for data_type, dataset in zip(["train", "validation", "test"], [train_dataset, val_dataset, test_dataset]):
+                data_path = os.path.join(dataset_path, data_type)
+                logging.info(f"Saving dataset {data_type.upper()} split to {data_path}")
+                dataset.save_to_disk(data_path, num_proc=cpu_count())
+    return train_dataset, val_dataset, test_dataset
+
+
+def compute_rouge(sentence, references, aggregation='max'):
+    # Skip empty sentences or sentences without words
+    if not sentence.strip() or not any(char.isalpha() for char in sentence):
+        return 0.0
+
+    scores = []
+    # Compute ROUGE scores between the sentence and each highlight
+    for reference in references:
+        try:
+            rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+        except:
+            rouge_score = 0.0
+            logging.debug
+            logging.debug("-----------------------------ROUGE ERROR-----------------------------")
+            logging.debug(sentence)
+            logging.debug(reference)
+            logging.debug(references)
+            logging.debug("---------------------------------------------------------------------")
+        scores.append(rouge_score)
+
+    # If no scores were computed, return 0.0
+    if not scores or scores is None or len(scores) == 0:
+        return 0.0
+    # Based on the aggregation parameter select the right score
+    if aggregation == 'max':
+        rouge_score = max(scores)
+    elif aggregation == 'average':
+        rouge_score = sum(scores) / len(scores)
+    elif aggregation == 'harmonic':
+        rouge_score = statistics.harmonic_mean(scores)
+    else:
+        # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
+        raise ValueError(f"Invalid aggregation parameter: {aggregation}")
+
+    return rouge_score
 
 
 class Explorer:
@@ -197,38 +302,54 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
         info_filename (str): the name of the info file. if None, don't create info file
         debug_filename (str): the name of the debug file. if None, don't create debug file
     """
-    enable_progress_bars()
     if os.path.exists(save_dir):
         raise FileExistsError(f"{save_dir} already exists!")
     os.makedirs(save_dir, exist_ok=True)
-    # logging.Logger.manager.loggerDict.keys() to check which loggers are in use
+    # print(logging.Logger.manager.loggerDict.keys()) # to check which loggers are in use
     base_formatter = logging.Formatter('%(asctime)s   %(message)s', "%Y-%m-%d %H:%M:%S")
     logger = logging.getLogger('')
     logger.setLevel(logging.DEBUG)
+
+    loggingTransformer.set_verbosity_debug()
+    loggerTransformer = loggingTransformer.get_logger("transformers")
+
+    loggingDatasets.set_verbosity_debug()
+    loggerDatasets = loggingDatasets.get_logger("datasets")
 
     if info_filename is not None:
         info_file_handler = logging.FileHandler(join(save_dir, info_filename))
         info_file_handler.setLevel(logging.INFO)
         info_file_handler.setFormatter(base_formatter)
         logger.addHandler(info_file_handler)
+        loggerTransformer.addHandler(info_file_handler)
+        loggerDatasets.addHandler(info_file_handler)
 
     if debug_filename is not None:
         debug_file_handler = logging.FileHandler(join(save_dir, debug_filename))
         debug_file_handler.setLevel(logging.DEBUG)
         debug_file_handler.setFormatter(base_formatter)
         logger.addHandler(debug_file_handler)
+        loggerTransformer.addHandler(debug_file_handler)
+        loggerDatasets.addHandler(info_file_handler)
 
     if console is not None:
         console_handler = logging.StreamHandler()
         if console == "debug":
             console_handler.setLevel(logging.DEBUG)
-            datasets.utils.logging.set_verbosity_debug()
+            loggingTransformer.set_verbosity_debug()
+            loggingDatasets.set_verbosity_debug()
+            loggingTransformer.disable_default_handler()
+
         if console == "info":
             console_handler.setLevel(logging.INFO)
-            datasets.utils.logging.set_verbosity_info()
+            loggingTransformer.set_verbosity_info()
+            loggingDatasets.set_verbosity_info()
+            loggingTransformer.disable_default_handler()
 
         console_handler.setFormatter(base_formatter)
         logger.addHandler(console_handler)
+        loggerTransformer.addHandler(console_handler)
+        loggerDatasets.addHandler(console_handler)
 
     def exception_handler(type_, value, tb):
         logger.info("\n" + "".join(traceback.format_exception(type_, value, tb)))

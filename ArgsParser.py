@@ -21,9 +21,9 @@ def parse_arguments():
     parser.add_argument("--output_dir", type=str, default="out_tmp", help="Path to save checkpoints and logs")
     parser.add_argument("--evaluation_strategy", type=str, default="epoch")
     parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate for the AdamW optimizer")
-    parser.add_argument("--seed", type=int, default=14, help="Random seed")
-    parser.add_argument("--save_dataset_on_disk", type=bool, default=False)
-    parser.add_argument("--push_to_hub", type=bool, default=False,
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--save_dataset_on_disk", type=int, default=0)
+    parser.add_argument("--push_to_hub", type=int, default=0,
                         help="Push model checkpoints to the Hub if set to true")
     ########################################
     args = parser.parse_args()

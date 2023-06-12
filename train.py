@@ -1,8 +1,6 @@
 import numpy as np
-from datasets import load_dataset, load_from_disk
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
-from DataParser import DataParser
-from utils import make_deterministic, setup_logging, cleaner
+from utils import make_deterministic, setup_logging, prepare_dataset
 import os
 import ArgsParser
 from datetime import datetime
@@ -10,137 +8,86 @@ import logging
 import torch
 from multiprocessing import cpu_count
 
-model_name = "bert-base-uncased"
-tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+# If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
+# torch.backends.cuda.matmul.allow_tf32 = True
+
 
 # Initial setup: parser, logging...
 args = ArgsParser.parse_arguments()
 start_time = datetime.now()
-args.output_dir = os.path.join("logs", args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
+args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
 
-setup_logging(args.output_dir, "info")
+setup_logging(os.path.join(args.output_dir, "logs"), "info")
 make_deterministic(args.seed)
 logging.info(f"Arguments: {args}")
 logging.info(f"The outputs are being saved in {args.output_dir}")
 logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
 
+model_name = args.model_name_or_path
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
 
-def preprocess_function(examples):
-    return tokenizer(examples["sentence"], examples["context"], truncation=True, padding="max_length")
 
-
-def prepare_dataset(dataset_path=None,
-                    num_train_examples=3000,
-                    num_val_examples=500,
-                    num_test_example=500,
-                    save_flag=False):
-    logging.info("##### PREPARING TRAIN, VAL, TEST DATASETS #####")
-    train_dataset, val_dataset, test_dataset = None, None, None
-
-    # Check if a path was provided and if a file exists at the path
-    if dataset_path is not None and os.path.isdir(dataset_path):
-        for data_type in ["train", "validation", "test"]:
-            data_path = os.path.join(dataset_path, data_type)
-            try:
-                logging.info(f"Loading {data_type} dataset from {data_path}")
-                if data_type == "train":
-                    train_dataset = load_from_disk(data_path)
-                elif data_type == "validation":
-                    val_dataset = load_from_disk(data_path)
-                elif data_type == "test":
-                    test_dataset = load_from_disk(data_path)
-            except FileNotFoundError:
-                logging.info(f"No dataset {data_type.upper()} split found at {data_path}. Loading default.")
-
-    if train_dataset is None or val_dataset is None or test_dataset is None:
-        logging.info("Loading CNN DailyMail dataset from Hugging Face Hub")
-        raw_dataset = load_dataset("cnn_dailymail", "3.0.0", num_proc=cpu_count())
-
-        # Apply cleaning and parsing steps to training dataset
-        if train_dataset is None:
-            logging.info("Cleaning and parsing TRAIN split")
-            cleaned_train_dataset = cleaner(raw_dataset['train'], num_train_examples)
-            parser = DataParser(dataset=cleaned_train_dataset)
-            train_dataset = parser()
-
-        # Apply cleaning and parsing steps to validation dataset
-        if val_dataset is None:
-            logging.info("Cleaning and parsing VALIDATION split")
-            cleaned_val_dataset = cleaner(raw_dataset['validation'], num_val_examples)
-            parser = DataParser(dataset=cleaned_val_dataset)
-            val_dataset = parser()
-
-        # Apply cleaning and parsing steps to test dataset
-        if test_dataset is None:
-            logging.info("Cleaning and parsing TEST split")
-            cleaned_test_dataset = cleaner(raw_dataset['test'], num_test_example)
-            parser = DataParser(dataset=cleaned_test_dataset)
-            test_dataset = parser()
-
-        # If save_flag is set and a path is provided, save the dataset
-        if dataset_path is None:
-            dataset_path = os.path.join("dataset", args.output_dir)
-        if not os.path.exists(dataset_path):
-            logging.debug("Creating folder {dataset_path} to store the dataset splits")
-            os.makedirs(dataset_path, exist_ok=True)
-        if save_flag:
-            for data_type, dataset in zip(["train", "validation", "test"], [train_dataset, val_dataset, test_dataset]):
-                data_path = os.path.join(dataset_path, data_type)
-                logging.info(f"Saving dataset {data_type.upper()} split to {data_path}")
-                dataset.save_to_disk(data_path, num_proc=cpu_count())
-    return train_dataset, val_dataset, test_dataset
+def tokenize_function(examples):
+    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding="max_length",
+                     return_tensors="pt")
 
 
 def main():
-    batch_size = 16
     num_labels = 1
 
-    logging.info("|-------------------------------------------------------------------------------------------|")
+    logging.info("\n|-------------------------------------------------------------------------------------------|")
     logging.info(f"##### DOWNLOADING MODEL {model_name} #####")
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
-    logging.info("|-------------------------------------------------------------------------------------------|")
+    logging.info("\n|-------------------------------------------------------------------------------------------|")
+
+    logging.info("##### PREPARING TRAIN, VAL, TEST DATASETS #####")
     dataset_train, dataset_val, dataset_test = prepare_dataset(args.dataset_path,
                                                                args.num_train_examples,
                                                                args.num_val_examples,
                                                                args.num_test_examples,
-                                                               args.save_dataset_on_disk)
+                                                               args.save_dataset_on_disk,
+                                                               args.output_dir,
+                                                               args.seed)
 
-    print(dataset_train[0])
-
-    dataset_train = dataset_train.map(preprocess_function, batched=True)
-    dataset_val = dataset_val.map(preprocess_function, batched=True)
+    dataset_train_tked = dataset_train.map(tokenize_function, batched=True)
+    dataset_val_tked = dataset_val.map(tokenize_function, batched=True)
     # dataset_test = dataset_test.map(preprocess_function, batched=True)
-    logging.info("|-------------------------------------------------------------------------------------------|")
+    logging.info("\n|-------------------------------------------------------------------------------------------|")
 
-    print("###########")
-    print(dataset_train[0])
-    print("###########")
-    print(tokenizer.decode(dataset_train[0]["input_ids"]))
-    exit(1)
+    logging.debug("##### EXAMPLE DATAPOINT #####")
+    logging.debug(dataset_train_tked[0])
+    logging.debug("|-------------------------------------------------------------------------------------------|")
 
+    model_out_dir = os.path.join(args.output_dir, "model")
+    os.makedirs(model_out_dir, exist_ok=True)
     default_args = {
-        "output_dir": "tmp",
-        "evaluation_strategy": "epoch",
-        "num_train_epochs": 2,
+        "output_dir": model_out_dir,
+        "evaluation_strategy": "steps",
+        "eval_steps": 0.25,
+        "num_train_epochs": args.epochs_num,
+        "seed": args.seed,
         "log_level": "info",
-        "report_to": "none",
+        "report_to": "none"
     }
 
     # OPTIMIZED PARAMETERS TRAINING
     training_args = TrainingArguments(
-        per_device_train_batch_size=8,
-        gradient_accumulation_steps=2,
+        per_device_train_batch_size=args.train_batch_size,
+        per_device_eval_batch_size=args.train_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_checkpointing=True,
         fp16=True,
-        **default_args,
+        learning_rate=args.lr,
+        optim="adamw_torch",
+        disable_tqdm=False,
+        **default_args
     )
     trainer = Trainer(
         model,
         training_args,
-        train_dataset=dataset_train,
-        eval_dataset=dataset_val,
+        train_dataset=dataset_train_tked,
+        eval_dataset=dataset_val_tked,
         tokenizer=tokenizer
-        # compute_metrics=compute_metrics
     )
     trainer.train()
     return
