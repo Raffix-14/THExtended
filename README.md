@@ -22,6 +22,6 @@ The THExtended project was carried out by the following team members:
 - Luca Zilli
 - Luca Agnese
 
-They actively contributed to the extension phase of the project, dedicating their efforts and expertise to realize this improved version of the software. The project is developed within the scope of an academic examination, and the team acknowledges the original work of Moreno La Quatra as the foundation for their project.
+They actively contributed to all the phases of the project, dedicating their efforts and expertise to realize this extended version of the software. The project is developed within the scope of an academic examination, and the team acknowledges the original work of Moreno La Quatra as the foundation for their project.
 
 For more information about the original project, please refer to the [https://github.com/MorenoLaQuatra/THExt](THExt).
