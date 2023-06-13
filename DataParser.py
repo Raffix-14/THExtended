@@ -10,12 +10,12 @@ class DataParser:
 
     def __init__(self, dataset=None, aggregation='max', is_test=False):
         self.dataset = dataset
-        self.from_pickle = False
         # Loading the spaCy model to split into sentences
         self.nlp = spacy.load('en_core_web_lg')
         self.aggregation = aggregation  # Aggregation method for ROUGE scores
         self.batch_size = int(np.ceil(len(self.dataset) // cpu_count()))  # Computing optimal the batch size
         self.parsedDataset = None
+        self.is_test = is_test
 
     def split_sentence(self, text):
         return [self.clean_sentence(s.text) for s in self.nlp(text).sents]  # Splitting into sentences and cleaning
@@ -40,7 +40,7 @@ class DataParser:
 
         highlights = summary.split("\n")  # Splitting the summary into single highlights
         for sentence in article_sentences:  # Computing ROUGE score (label) for each sentence
-            score = compute_rouge(sentence, highlights, aggregation=self.aggregation)
+            score = compute_rouge(sentence, highlights, aggregation=self.aggregation, is_test=self.is_test)
             rouges.append(score)
         return {"sentences": article_sentences, "context": context, "labels": rouges}  # No need for highlights text
 

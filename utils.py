@@ -1,4 +1,5 @@
-import re
+import copy
+
 import spacy
 from datasets import Dataset
 import pandas as pd
@@ -7,7 +8,6 @@ from collections import defaultdict
 import seaborn as sns
 import matplotlib.pyplot as plt
 import gc
-import torch
 import time
 from tqdm import tqdm
 from evaluate import load
@@ -130,21 +130,21 @@ def prepare_dataset(dataset_path=None,
         # Apply cleaning and parsing steps to training dataset
         if train_dataset is None:
             logging.info("Cleaning and parsing TRAIN split")
-            cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples)
+            cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples, seed=seed)
             parser = DataParser(dataset=cleaned_train_dataset)
             train_dataset = parser()
 
         # Apply cleaning and parsing steps to validation dataset
         if val_dataset is None:
             logging.info("Cleaning and parsing VALIDATION split")
-            cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples)
+            cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples, seed=seed)
             parser = DataParser(dataset=cleaned_val_dataset)
             val_dataset = parser()
 
         # Apply cleaning and parsing steps to test dataset
         if test_dataset is None:
             logging.info("Cleaning and parsing TEST split")
-            cleaned_test_dataset = clean_dataset(raw_dataset['test'], num_test_example)
+            cleaned_test_dataset = clean_dataset(raw_dataset['test'], num_test_example, seed=seed)
             parser = DataParser(dataset=cleaned_test_dataset, is_test=True)
             test_dataset = parser()
 
@@ -162,7 +162,7 @@ def prepare_dataset(dataset_path=None,
     return train_dataset, val_dataset, test_dataset
 
 
-def compute_rouge(sentence, references, aggregation='max'):
+def compute_rouge(sentence, references, aggregation='max', is_test=False):
     # Skip empty sentences or sentences without words
     if not sentence.strip() or not any(char.isalpha() for char in sentence):
         return 0.0
@@ -171,16 +171,20 @@ def compute_rouge(sentence, references, aggregation='max'):
     # Compute ROUGE scores between the sentence and each highlight
     for reference in references:
         try:
-            rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+            if is_test:
+                rouge_score = Rouge().get_scores(sentence, reference)[0]
+            else:
+                rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
         except:
             rouge_score = 0.0
-            logging.debug
             logging.debug("-----------------------------ROUGE ERROR-----------------------------")
             logging.debug(sentence)
             logging.debug(reference)
             logging.debug(references)
             logging.debug("---------------------------------------------------------------------")
         scores.append(rouge_score)
+    if is_test:
+        return aggregate_test_scores(scores)
 
     # If no scores were computed, return 0.0
     if not scores or scores is None or len(scores) == 0:
@@ -197,6 +201,54 @@ def compute_rouge(sentence, references, aggregation='max'):
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
 
     return rouge_score
+
+
+def aggregate_test_scores(scores):
+    # Initialize variables to keep track of maximum "f" and corresponding dictionaries
+    max_rouge_1_f = 0.0
+    max_rouge_1_dict = None
+
+    max_rouge_2_f = 0.0
+    max_rouge_2_dict = None
+
+    max_rouge_l_f = 0.0
+    max_rouge_l_dict = None
+
+    # Iterate through the list of dictionaries
+    for dictionary in scores:
+        rouge_1_f = dictionary["rouge-1"]["f"]
+        if rouge_1_f >= max_rouge_1_f:
+            max_rouge_1_f = rouge_1_f
+            max_rouge_1_dict = dictionary["rouge-1"]
+
+        rouge_2_f = dictionary["rouge-2"]["f"]
+        if rouge_2_f >= max_rouge_2_f:
+            max_rouge_2_f = rouge_2_f
+            max_rouge_2_dict = dictionary["rouge-2"]
+
+        rouge_l_f = dictionary["rouge-l"]["f"]
+        if rouge_l_f >= max_rouge_l_f:
+            max_rouge_l_f = rouge_l_f
+            max_rouge_l_dict = dictionary["rouge-l"]
+    return {"rouge-1": max_rouge_1_dict, "rouge-2": max_rouge_2_dict, "rouge-l": max_rouge_l_dict}
+
+
+def get_scores(sentences, context, model, tokenizer):
+    context_list = [context] * len(sentences)
+    inputs = tokenizer(sentences, context_list, truncation="only_second", padding="max_length", return_tensors="pt")
+    # Print each article separately
+    # for x in inputs["input_ids"]:
+    # logging.debug(tokenizer.decode(x))
+    # logging.debug("---------------------------------------------------------------------")
+    inputs.to(torch.device("cuda:0"))
+    with torch.no_grad():
+        outputs = model(**inputs)
+    scores = outputs.logits.squeeze().tolist()
+    sorted_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    sorted_sentences = [sentences[i] for i in sorted_indices]
+    sorted_scores = [scores[i] for i in sorted_indices]
+
+    return sorted_sentences, sorted_scores
 
 
 class Explorer:
@@ -229,7 +281,7 @@ class Explorer:
         return [section1, section2, section3]
 
     @staticmethod
-    def compute_similarity(article, section):
+    def compute_similarity(self, article, section):
         return self.bertscore.compute(predictions=[section], references=[article],
                                       model_type="allenai/longformer-base-4096")
 
@@ -330,7 +382,7 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
         debug_file_handler.setFormatter(base_formatter)
         logger.addHandler(debug_file_handler)
         loggerTransformer.addHandler(debug_file_handler)
-        loggerDatasets.addHandler(info_file_handler)
+        loggerDatasets.addHandler(debug_file_handler)
 
     if console is not None:
         console_handler = logging.StreamHandler()

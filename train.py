@@ -1,4 +1,3 @@
-import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from utils import make_deterministic, setup_logging, prepare_dataset
 import os
