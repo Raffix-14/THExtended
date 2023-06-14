@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 from utils import compute_rouge
-
+import math
 
 class DataParser:
 
@@ -24,15 +24,20 @@ class DataParser:
     def clean_sentence(s):
         return s.strip()  # Removing leading and trailing whitespaces
 
-    def extract_context(self, article):
+    def get_first_three_sentences(self, article):
         sentences = self.split_sentence(article)[:3]
         return ' '.join(sent for sent in sentences)
+
+    def extract_context(self, article_sentences):
+        # Compute the index for the first section
+        cut_off = math.ceil(len(article_sentences) / 3)
+        return ' '.join(sent for sent in article_sentences[:cut_off])
 
     def process_row(self, row):
         # Unpack the parameter tuple
         article, summary = row
         article_sentences = self.split_sentence(article)
-        context = self.extract_context(article)
+        context = self.extract_context(article_sentences)
         rouges = []
 
         if self.is_test:  # Optimization: skip rouge computation if test split for speed-up
