@@ -101,8 +101,8 @@ def clean_dataset(dataset, num_samples, seed=42):
 def prepare_dataset(dataset_path=None,
                     num_train_examples=3000,
                     num_val_examples=500,
-                    num_test_example=500,
-                    save_flag=False,
+                    num_test_examples=500,
+                    save_flag=0,
                     save_dir=None,
                     seed=42):
     from DataParser import DataParser
@@ -123,6 +123,14 @@ def prepare_dataset(dataset_path=None,
             except FileNotFoundError:
                 logging.info(f"No dataset {data_type.upper()} split found at {data_path}. Loading default.")
 
+    # If save_flag is set and a path is provided, save the dataset
+    if save_flag==1:
+        if dataset_path is None:
+            dataset_path = os.path.join(save_dir, "dataset")
+        if not os.path.exists(dataset_path):
+            logging.debug("Creating folder {dataset_path} to store the dataset splits")
+            os.makedirs(dataset_path, exist_ok=True)
+
     if train_dataset is None or val_dataset is None or test_dataset is None:
         logging.info("Loading CNN DailyMail dataset from Hugging Face Hub")
         raw_dataset = load_dataset("cnn_dailymail", "3.0.0", num_proc=cpu_count())
@@ -133,6 +141,10 @@ def prepare_dataset(dataset_path=None,
             cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples, seed=seed)
             parser = DataParser(dataset=cleaned_train_dataset)
             train_dataset = parser()
+            if save_flag:
+                data_path = os.path.join(dataset_path, 'train')
+                logging.info(f"Saving dataset TRAIN split to {data_path}")
+                dataset.save_to_disk(data_path, num_proc=cpu_count())
 
         # Apply cleaning and parsing steps to validation dataset
         if val_dataset is None:
@@ -140,24 +152,20 @@ def prepare_dataset(dataset_path=None,
             cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples, seed=seed)
             parser = DataParser(dataset=cleaned_val_dataset)
             val_dataset = parser()
+            if save_flag:
+                data_path = os.path.join(dataset_path, 'validation')
+                logging.info(f"Saving dataset VALIDATION split to {data_path}")
+                dataset.save_to_disk(data_path, num_proc=cpu_count())
 
         # Apply cleaning and parsing steps to test dataset
         if test_dataset is None:
             logging.info("Cleaning and parsing TEST split")
-            cleaned_test_dataset = clean_dataset(raw_dataset['test'], num_test_example, seed=seed)
+            cleaned_test_dataset = clean_dataset(raw_dataset['test'], num_test_examples, seed=seed)
             parser = DataParser(dataset=cleaned_test_dataset, is_test=True)
             test_dataset = parser()
-
-        # If save_flag is set and a path is provided, save the dataset
-        if save_flag:
-            if dataset_path is None:
-                dataset_path = os.path.join(save_dir, "dataset")
-            if not os.path.exists(dataset_path):
-                logging.debug("Creating folder {dataset_path} to store the dataset splits")
-                os.makedirs(dataset_path, exist_ok=True)
-            for data_type, dataset in zip(["train", "validation", "test"], [train_dataset, val_dataset, test_dataset]):
-                data_path = os.path.join(dataset_path, data_type)
-                logging.info(f"Saving dataset {data_type.upper()} split to {data_path}")
+            if save_flag:
+                data_path = os.path.join(dataset_path, 'test')
+                logging.info(f"Saving dataset TEST split to {data_path}")
                 dataset.save_to_disk(data_path, num_proc=cpu_count())
     return train_dataset, val_dataset, test_dataset
 
