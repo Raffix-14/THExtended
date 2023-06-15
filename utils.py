@@ -144,7 +144,7 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'train')
                 logging.info(f"Saving dataset TRAIN split to {data_path}")
-                dataset.save_to_disk(data_path, num_proc=cpu_count())
+                train_dataset.save_to_disk(data_path, num_proc=cpu_count())
 
         # Apply cleaning and parsing steps to validation dataset
         if val_dataset is None:
@@ -155,7 +155,7 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'validation')
                 logging.info(f"Saving dataset VALIDATION split to {data_path}")
-                dataset.save_to_disk(data_path, num_proc=cpu_count())
+                val_dataset.save_to_disk(data_path, num_proc=cpu_count())
 
         # Apply cleaning and parsing steps to test dataset
         if test_dataset is None:
@@ -166,7 +166,7 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'test')
                 logging.info(f"Saving dataset TEST split to {data_path}")
-                dataset.save_to_disk(data_path, num_proc=cpu_count())
+                test_dataset.save_to_disk(data_path, num_proc=cpu_count())
     return train_dataset, val_dataset, test_dataset
 
 
