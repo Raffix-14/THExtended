@@ -2,8 +2,9 @@ import ArgsParser
 import logging
 import os
 from datetime import datetime
-from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_rouge
+from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_labels
 import torch
+import numpy as np
 from multiprocessing import cpu_count
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
 
@@ -35,7 +36,9 @@ def evaluate_model(dataset, model, tokenizer, num_highlight=3):
     current_context = None
     current_article_sentences = []
     current_highlight = None
-    results = []
+    rouges = []
+    similarities = []
+
     for example in dataset:
         sentence = example['sentence']
         context = example['context']
@@ -46,7 +49,10 @@ def evaluate_model(dataset, model, tokenizer, num_highlight=3):
             # Process previous article
             if current_context is not None:
                 ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-                results.append(evaluate_article(ranked_sents[:num_highlight], highlights))
+                rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlight], highlights)
+                rouges.append(rouge_dict)
+                similarities.append(similarity)
+
             # Start a new article
             current_context = context
             current_highlight = highlights
@@ -58,9 +64,11 @@ def evaluate_model(dataset, model, tokenizer, num_highlight=3):
     # Process the last article
     if current_context is not None:
         ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-        results.append(evaluate_article(ranked_sents[:num_highlight], current_highlight))
+        rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlight], current_highlight)
+        rouges.append(rouge_dict)
+        similarities.append(similarity)
 
-    return compute_avg_dict(results)
+    return compute_avg_dict(rouges), np.mean(similarities)
 
 
 def evaluate_article(highlights_pred, highlights_gt):
@@ -73,10 +81,12 @@ def evaluate_article(highlights_pred, highlights_gt):
     Returns: a dictionary containing the ROUGE scores
 
     """
-    scores = []
+    rouges = []
+    semantic_similarities = []
     for h in highlights_pred:
-        scores.append(compute_rouge(h, highlights_gt, is_test=True))
-    return compute_avg_dict(scores)
+        rouges.append(compute_labels(h, highlights_gt, alpha=1.0, is_test=True))
+        semantic_similarities.append(compute_labels(h, highlights_gt, alpha=0.0, is_test=True))
+    return compute_avg_dict(rouges), np.mean(semantic_similarities)
 
 
 def compute_avg_dict(dict_list):
@@ -147,8 +157,9 @@ def main():
 
     logging.info("##### EVALUATING MODEL #####")
     results = evaluate_model(dataset_test, model, tokenizer)
-    for key, value in results.items():
+    for key, value in results[0].items():
         logging.info(f"{key}: {value}")
+    logging.info(f"Mean semantic similarity: {results[1]}")
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
 

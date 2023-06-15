@@ -46,6 +46,7 @@ def main():
                                                                args.num_test_examples,
                                                                args.save_dataset_on_disk,
                                                                args.output_dir,
+                                                               args.alpha,
                                                                args.seed)
 
     dataset_train_tked = dataset_train.map(tokenize_function, batched=True)
@@ -79,6 +80,7 @@ def main():
         learning_rate=args.lr,
         optim="adamw_torch",
         disable_tqdm=False,
+        log_level_replica="passive",
         **default_args
     )
     trainer = Trainer(
@@ -89,6 +91,7 @@ def main():
         tokenizer=tokenizer
     )
     trainer.train()
+
     return
 
 

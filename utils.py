@@ -1,5 +1,3 @@
-import copy
-
 import spacy
 from datasets import Dataset
 import pandas as pd
@@ -104,6 +102,7 @@ def prepare_dataset(dataset_path=None,
                     num_test_examples=500,
                     save_flag=0,
                     save_dir=None,
+                    alpha=1.0,
                     seed=42):
     from DataParser import DataParser
     train_dataset, val_dataset, test_dataset = None, None, None
@@ -124,7 +123,7 @@ def prepare_dataset(dataset_path=None,
                 logging.info(f"No dataset {data_type.upper()} split found at {data_path}. Loading default.")
 
     # If save_flag is set and a path is provided, save the dataset
-    if save_flag==1:
+    if save_flag == 1:
         if dataset_path is None:
             dataset_path = os.path.join(save_dir, "dataset")
         if not os.path.exists(dataset_path):
@@ -139,7 +138,7 @@ def prepare_dataset(dataset_path=None,
         if train_dataset is None:
             logging.info("Cleaning and parsing TRAIN split")
             cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples, seed=seed)
-            parser = DataParser(dataset=cleaned_train_dataset)
+            parser = DataParser(dataset=cleaned_train_dataset, alpha=alpha)
             train_dataset = parser()
             if save_flag:
                 data_path = os.path.join(dataset_path, 'train')
@@ -150,7 +149,7 @@ def prepare_dataset(dataset_path=None,
         if val_dataset is None:
             logging.info("Cleaning and parsing VALIDATION split")
             cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples, seed=seed)
-            parser = DataParser(dataset=cleaned_val_dataset)
+            parser = DataParser(dataset=cleaned_val_dataset, alpha=alpha)
             val_dataset = parser()
             if save_flag:
                 data_path = os.path.join(dataset_path, 'validation')
@@ -170,7 +169,7 @@ def prepare_dataset(dataset_path=None,
     return train_dataset, val_dataset, test_dataset
 
 
-def compute_rouge(sentence, references, aggregation='max', is_test=False):
+def compute_labels(sentence, references, aggregation='max', alpha=1.0, is_test=False):
     # Skip empty sentences or sentences without words
     if not sentence.strip() or not any(char.isalpha() for char in sentence):
         return 0.0
@@ -182,7 +181,13 @@ def compute_rouge(sentence, references, aggregation='max', is_test=False):
             if is_test:
                 rouge_score = Rouge().get_scores(sentence, reference)[0]
             else:
-                rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+                if alpha == 1.0:
+                    rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+                elif alpha == 0.0:
+                    rouge_score = 5  # ONLY BERT SIMILARITY COMPUTED
+                else:
+                    rouge_score = alpha * Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f'] + \
+                                  (1 - alpha)  # * BERT SIMILARITY
         except:
             rouge_score = 0.0
             logging.debug("-----------------------------ROUGE ERROR-----------------------------")
@@ -288,7 +293,6 @@ class Explorer:
         section3 = sentences[cut2:]
         return [section1, section2, section3]
 
-    @staticmethod
     def compute_similarity(self, article, section):
         return self.bertscore.compute(predictions=[section], references=[article],
                                       model_type="allenai/longformer-base-4096")
@@ -355,7 +359,7 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
     Creates one file for INFO logs and one for DEBUG logs.
     Args:
         save_dir (str): creates the folder where to save the files.
-        debug (str):
+        console (str):
             if == "debug" prints on console debug messages and higher
             if == "info"  prints on console info messages and higher
             if == None does not use console (useful when a logger has already been set)

@@ -3,12 +3,13 @@ from datasets import Dataset, load_from_disk
 import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
-from utils import compute_rouge
+from utils import compute_labels
 import math
+
 
 class DataParser:
 
-    def __init__(self, dataset=None, aggregation='max', is_test=False):
+    def __init__(self, dataset=None, aggregation='max', alpha=1.0, is_test=False):
         self.dataset = dataset
         # Loading the spaCy model to split into sentences
         self.nlp = spacy.load('en_core_web_lg')
@@ -16,6 +17,7 @@ class DataParser:
         self.batch_size = int(np.ceil(len(self.dataset) // cpu_count()))  # Computing optimal the batch size
         self.parsedDataset = None
         self.is_test = is_test
+        self.alpha = alpha
 
     def split_sentence(self, text):
         return [self.clean_sentence(s.text) for s in self.nlp(text).sents]  # Splitting into sentences and cleaning
@@ -45,7 +47,8 @@ class DataParser:
 
         highlights = summary.split("\n")  # Splitting the summary into single highlights
         for sentence in article_sentences:  # Computing ROUGE score (label) for each sentence
-            score = compute_rouge(sentence, highlights, aggregation=self.aggregation, is_test=self.is_test)
+            score = compute_labels(sentence, highlights, aggregation=self.aggregation, alpha=self.alpha,
+                                   is_test=self.is_test)
             rouges.append(score)
         return {"sentences": article_sentences, "context": context, "labels": rouges}  # No need for highlights text
 
