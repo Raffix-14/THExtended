@@ -24,6 +24,8 @@ from datasets import load_dataset, load_from_disk
 from datasets.utils import logging as loggingDatasets
 from transformers.utils import logging as loggingTransformer
 
+similarity_model = load('bertscore')
+
 
 def clean_dataset(dataset, num_samples, seed=42):
     nlp = spacy.load("en_core_web_lg")
@@ -174,46 +176,58 @@ def compute_labels(sentence, references, aggregation='max', alpha=1.0, is_test=F
     if not sentence.strip() or not any(char.isalpha() for char in sentence):
         return 0.0
 
-    scores = []
+    scores = []  # List of scores for each highlight
     # Compute ROUGE scores between the sentence and each highlight
     for reference in references:
         try:
-            if is_test:
-                rouge_score = Rouge().get_scores(sentence, reference)[0]
+            if alpha == 1.0 and is_test:
+                highlight_score = Rouge().get_scores(sentence, reference)[0]
+            elif alpha == 0.0 and is_test:
+                highlight_score = similarity_model.compute(predictions=[sentence],
+                                                           references=[reference],
+                                                           model_type="microsoft/mpnet-base")['f1'][0]
             else:
                 if alpha == 1.0:
-                    rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+                    highlight_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
                 elif alpha == 0.0:
-                    rouge_score = 5  # ONLY BERT SIMILARITY COMPUTED
+                    highlight_score = similarity_model.compute(predictions=[sentence],
+                                                               references=[reference],
+                                                               model_type="microsoft/mpnet-base")['f1'][0]
                 else:
-                    rouge_score = alpha * Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f'] + \
-                                  (1 - alpha)  # * BERT SIMILARITY
+                    similarity = similarity_model.compute(predictions=[sentence],
+                                                          references=[reference],
+                                                          model_type="microsoft/mpnet-base")
+                    highlight_score = alpha * Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f'] + \
+                                      (1 - alpha) * similarity['f1'][0]
         except:
-            rouge_score = 0.0
+            highlight_score = 0.0
             logging.debug("-----------------------------ROUGE ERROR-----------------------------")
             logging.debug(sentence)
             logging.debug(reference)
             logging.debug(references)
             logging.debug("---------------------------------------------------------------------")
-        scores.append(rouge_score)
-    if is_test:
+        scores.append(highlight_score)
+
+    if alpha == 1.0 and is_test:
         return aggregate_test_scores(scores)
+    elif alpha == 0.0 and is_test:
+        return max(scores)
 
     # If no scores were computed, return 0.0
     if not scores or scores is None or len(scores) == 0:
         return 0.0
     # Based on the aggregation parameter select the right score
     if aggregation == 'max':
-        rouge_score = max(scores)
+        label = max(scores)
     elif aggregation == 'average':
-        rouge_score = sum(scores) / len(scores)
+        label = sum(scores) / len(scores)
     elif aggregation == 'harmonic':
-        rouge_score = statistics.harmonic_mean(scores)
+        label = statistics.harmonic_mean(scores)
     else:
         # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
 
-    return rouge_score
+    return label
 
 
 def aggregate_test_scores(scores):
