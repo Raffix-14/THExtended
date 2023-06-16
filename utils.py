@@ -23,6 +23,7 @@ import statistics
 from datasets import load_dataset, load_from_disk
 from datasets.utils import logging as loggingDatasets
 from transformers.utils import logging as loggingTransformer
+from transformers import TrainerCallback
 
 similarity_model = load('bertscore')
 
@@ -433,6 +434,17 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
         logger.info("\n" + "".join(traceback.format_exception(type_, value, tb)))
 
     sys.excepthook = exception_handler
+
+
+class LogCallback(TrainerCallback):
+    def on_evaluate(self, args, state, control, **kwargs):
+        final_str = "##### EVALUATION STEP RESULTS #####\n"
+        for step in state.log_history:
+            for k, v in step.items():
+                final_str += str(k) + ': ' + str(v) + '\n'
+            final_str += "---------------------------------\n"
+        logging.debug(final_str)
+        return
 
 
 def make_deterministic(seed=0):

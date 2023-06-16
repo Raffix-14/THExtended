@@ -1,5 +1,5 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
-from utils import make_deterministic, setup_logging, prepare_dataset
+from utils import make_deterministic, setup_logging, prepare_dataset, LogCallback
 import os
 import ArgsParser
 from datetime import datetime
@@ -63,10 +63,11 @@ def main():
     default_args = {
         "output_dir": model_out_dir,
         "evaluation_strategy": "steps",
-        "eval_steps": 0.25,
-        "num_train_epochs": args.epochs_num,
+        "eval_steps": 0.5,
+        "save_strategy": "epoch",
         "seed": args.seed,
-        "log_level": "info",
+        "log_level": "passive",
+        "log_level_replica": "passive",
         "report_to": "none"
     }
 
@@ -76,11 +77,12 @@ def main():
         per_device_eval_batch_size=args.train_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_checkpointing=True,
+        num_train_epochs=args.epochs_num,
         fp16=True,
         learning_rate=args.lr,
         optim="adamw_torch",
         disable_tqdm=False,
-        log_level_replica="passive",
+        save_safetensors=True,
         **default_args
     )
     trainer = Trainer(
@@ -88,9 +90,17 @@ def main():
         training_args,
         train_dataset=dataset_train_tked,
         eval_dataset=dataset_val_tked,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        callbacks=[LogCallback]
     )
     trainer.train()
+
+    final_str = "##### FINAL RESULTS #####"
+    for step in trainer.state.log_history:
+        for k, v in step.items():
+            final_str += str(k) + ': ' + str(v) + '\n'
+        final_str += "---------------------------------\n"
+    logging.info(final_str)
 
     return
 

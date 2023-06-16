@@ -40,7 +40,7 @@ class DataParser:
         article, summary = row
         article_sentences = self.split_sentence(article)
         context = self.extract_context(article_sentences)
-        rouges = []
+        labels = []
 
         if self.is_test:  # Optimization: skip rouge computation if test split for speed-up
             return {"sentences": article_sentences, "context": context, "highlights": summary}  # No need for labels
@@ -49,8 +49,8 @@ class DataParser:
         for sentence in article_sentences:  # Computing ROUGE score (label) for each sentence
             score = compute_labels(sentence, highlights, aggregation=self.aggregation, alpha=self.alpha,
                                    is_test=self.is_test)
-            rouges.append(score)
-        return {"sentences": article_sentences, "context": context, "labels": rouges}  # No need for highlights text
+            labels.append(score)
+        return {"sentences": article_sentences, "context": context, "labels": labels}  # No need for highlights text
 
     def process_batch(self, batch):
         return [self.process_row(row) for row in batch]
