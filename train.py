@@ -11,43 +11,55 @@ from multiprocessing import cpu_count
 # torch.backends.cuda.matmul.allow_tf32 = True
 
 
-# Initial setup: parser, logging...
-args = ArgsParser.parse_arguments()
-start_time = datetime.now()
-args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
-
-setup_logging(os.path.join(args.output_dir, "logs"), "info")
-make_deterministic(args.seed)
-logging.info(f"Arguments: {args}")
-logging.info(f"The outputs are being saved in {args.output_dir}")
-logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
-
-model_name = args.model_name_or_path
-tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-
-
 def tokenize_function(examples):
     return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding="max_length",
                      return_tensors="pt")
 
+def combine_labels(example):
+
+    rouge = example['rouge']
+    similarity = example['similarity']
+    label = alpha*rouge + (1-alpha)*similarity
+    example['label'] = label
+    
+    return example
 
 def main():
-    num_labels = 1
+# Initial setup: parser, logging...
+    args = ArgsParser.parse_arguments()
+    start_time = datetime.now()
+    args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
+    setup_logging(os.path.join(args.output_dir, "logs"), "info")
+    make_deterministic(args.seed)
+    logging.info(f"Arguments: {args}")
+    logging.info(f"The outputs are being saved in {args.output_dir}")
+    logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
+    model_name = args.model_name_or_path
+
+    global tokenizer 
+    global alpha 
+
+    alpha = args.alpha
 
     logging.info("\n|-------------------------------------------------------------------------------------------|")
     logging.info(f"##### DOWNLOADING MODEL {model_name} #####")
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=1)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
     logging.info("##### PREPARING TRAIN, VAL, TEST DATASETS #####")
-    dataset_train, dataset_val, dataset_test = prepare_dataset(args.dataset_path,
+    dataset_train, dataset_val, _ = prepare_dataset(args.dataset_path,
                                                                args.num_train_examples,
                                                                args.num_val_examples,
                                                                args.num_test_examples,
                                                                args.save_dataset_on_disk,
-                                                               args.output_dir,
-                                                               args.alpha,
+                                                               args.output_dir,                                                
                                                                args.seed)
+
+    ###### #Change the labels to the desired combination    
+    
+    dataset_train = dataset_train.map(combine_labels, batched=True)
+    dataset_val = dataset_val.map(combine_labels, batched=True)
 
     dataset_train_tked = dataset_train.map(tokenize_function, batched=True)
     dataset_val_tked = dataset_val.map(tokenize_function, batched=True)

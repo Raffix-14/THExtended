@@ -1,15 +1,15 @@
 import spacy
-from datasets import Dataset, load_from_disk
+from datasets import Dataset
 import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 from utils import compute_labels
 import math
-
+from sentence_transformers import SentenceTransformer
 
 class DataParser:
 
-    def __init__(self, dataset=None, aggregation='max', alpha=1.0, is_test=False):
+    def __init__(self, dataset=None, aggregation='max', is_test=False):
         self.dataset = dataset
         # Loading the spaCy model to split into sentences
         self.nlp = spacy.load('en_core_web_lg')
@@ -17,7 +17,8 @@ class DataParser:
         self.batch_size = int(np.ceil(len(self.dataset) // cpu_count()))  # Computing optimal the batch size
         self.parsedDataset = None
         self.is_test = is_test
-        self.alpha = alpha
+        self.similarity_model = SentenceTransformer("all-MiniLM-L6-v2")        
+
 
     def split_sentence(self, text):
         return [self.clean_sentence(s.text) for s in self.nlp(text).sents]  # Splitting into sentences and cleaning
@@ -40,17 +41,18 @@ class DataParser:
         article, summary = row
         article_sentences = self.split_sentence(article)
         context = self.extract_context(article_sentences)
-        labels = []
+        rouge_labels, similarity_labels =list(),list()
 
         if self.is_test:  # Optimization: skip rouge computation if test split for speed-up
             return {"sentences": article_sentences, "context": context, "highlights": summary}  # No need for labels
 
         highlights = summary.split("\n")  # Splitting the summary into single highlights
         for sentence in article_sentences:  # Computing ROUGE score (label) for each sentence
-            score = compute_labels(sentence, highlights, aggregation=self.aggregation, alpha=self.alpha,
-                                   is_test=self.is_test)
-            labels.append(score)
-        return {"sentences": article_sentences, "context": context, "labels": labels}  # No need for highlights text
+            rouge_score, similarity_score = compute_labels(sentence, highlights, aggregation=self.aggregation, is_test=self.is_test, \
+                                                           similarity_model = self.similarity_model)
+            rouge_labels.append(rouge_score)
+            similarity_labels.append(similarity_score)
+        return {"sentences": article_sentences, "context": context, "rouge_labels": rouge_labels, "similarity_labels": similarity_labels, "highlights": summary}  
 
     def process_batch(self, batch):
         return [self.process_row(row) for row in batch]
@@ -64,8 +66,11 @@ class DataParser:
         articles = self.dataset["article"]
         summaries = self.dataset["highlights"]
 
+        processed_data = self.process_batch(zip(articles,summaries))
+
+        """
         # Create a Pool object
-        pool = Pool()
+        pool = Pool(1)
         # Apply pool.imap() with tqdm
         results = []
         with tqdm(total=cpu_count(), desc='Processing batch') as pbar:
@@ -78,19 +83,19 @@ class DataParser:
         # Close the pool
         pool.close()
         pool.join()
-
-        processed_data = [item for sublist in results for item in sublist]
+        """
         sentences_list = [item for sublist in processed_data for item in sublist["sentences"]]
         context_list = [context for sublist in processed_data for context in
                         [sublist["context"]] * len(sublist["sentences"])]
+        highlights_list = [highlights for sublist in processed_data for highlights in
+                [sublist["highlights"]] * len(sublist["sentences"])]
         # If test split, retrieve highlights, else retrieve label
         if self.is_test:
-            highlights_list = [highlights for sublist in processed_data for highlights in
-                               [sublist["highlights"]] * len(sublist["sentences"])]
             self.parsedDataset = Dataset.from_dict(
                 {"sentence": sentences_list, "context": context_list, "highlights": highlights_list})
         else:
-            labels_list = [label for sublist in processed_data for label in sublist["labels"]]
+            rouge_list = [label for sublist in processed_data for label in sublist["rouge_labels"]]
+            similiarity_list = [label for sublist in processed_data for label in sublist["similarity_labels"]]
             self.parsedDataset = Dataset.from_dict(
-                {"sentence": sentences_list, "context": context_list, "label": labels_list})
+                {"sentence": sentences_list, "context": context_list, "rouge": rouge_list, "similarity": similiarity_list, "highlights": highlights_list})   #TO DOUBLE CHECK
         return self.parsedDataset

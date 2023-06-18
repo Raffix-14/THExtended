@@ -24,6 +24,7 @@ from datasets import load_dataset, load_from_disk
 from datasets.utils import logging as loggingDatasets
 from transformers.utils import logging as loggingTransformer
 from transformers import TrainerCallback
+from sentence_transformers import util as util_st
 
 similarity_model = load('bertscore')
 
@@ -105,7 +106,6 @@ def prepare_dataset(dataset_path=None,
                     num_test_examples=500,
                     save_flag=0,
                     save_dir=None,
-                    alpha=1.0,
                     seed=42):
     from DataParser import DataParser
     train_dataset, val_dataset, test_dataset = None, None, None
@@ -141,7 +141,7 @@ def prepare_dataset(dataset_path=None,
         if train_dataset is None:
             logging.info("Cleaning and parsing TRAIN split")
             cleaned_train_dataset = clean_dataset(raw_dataset['train'], num_train_examples, seed=seed)
-            parser = DataParser(dataset=cleaned_train_dataset, alpha=alpha)
+            parser = DataParser(dataset=cleaned_train_dataset)
             train_dataset = parser()
             if save_flag:
                 data_path = os.path.join(dataset_path, 'train')
@@ -152,7 +152,7 @@ def prepare_dataset(dataset_path=None,
         if val_dataset is None:
             logging.info("Cleaning and parsing VALIDATION split")
             cleaned_val_dataset = clean_dataset(raw_dataset['validation'], num_val_examples, seed=seed)
-            parser = DataParser(dataset=cleaned_val_dataset, alpha=alpha)
+            parser = DataParser(dataset=cleaned_val_dataset)
             val_dataset = parser()
             if save_flag:
                 data_path = os.path.join(dataset_path, 'validation')
@@ -172,63 +172,54 @@ def prepare_dataset(dataset_path=None,
     return train_dataset, val_dataset, test_dataset
 
 
-def compute_labels(sentence, references, aggregation='max', alpha=1.0, is_test=False):
+def compute_labels(sentence, references, similarity_model = None, aggregation='max', is_test=False):
+
+    
     # Skip empty sentences or sentences without words
     if not sentence.strip() or not any(char.isalpha() for char in sentence):
-        return 0.0
+        return 0.0, 0.0
 
-    scores = []  # List of scores for each highlight
+    rouge_scores, similarity_scores = list(),list()    # List of rouge and similiraty scores for each highlight
+    
     # Compute ROUGE scores between the sentence and each highlight
     for reference in references:
-        try:
-            if alpha == 1.0 and is_test:
-                highlight_score = Rouge().get_scores(sentence, reference)[0]
-            elif alpha == 0.0 and is_test:
-                highlight_score = similarity_model.compute(predictions=[sentence],
-                                                           references=[reference],
-                                                           model_type="microsoft/mpnet-base")['f1'][0]
-            else:
-                if alpha == 1.0:
-                    highlight_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
-                elif alpha == 0.0:
-                    highlight_score = similarity_model.compute(predictions=[sentence],
-                                                               references=[reference],
-                                                               model_type="microsoft/mpnet-base")['f1'][0]
-                else:
-                    similarity = similarity_model.compute(predictions=[sentence],
-                                                          references=[reference],
-                                                          model_type="microsoft/mpnet-base")
-                    highlight_score = alpha * Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f'] + \
-                                      (1 - alpha) * similarity['f1'][0]
+        try:        #THE TWO CASES MUST BE CONSIDERED SEPARETELY
+            rouge_score = Rouge().get_scores(sentence, reference) if is_test else Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+            similarity_score = util_st.pytorch_cos_sim(similarity_model.encode(sentence,convert_to_tensor = True),\
+                                                       similarity_model.encode(reference, convert_to_tensor = True)).item()   
         except:
-            highlight_score = 0.0
+            rouge_score = 0.0
+            similarity_score = 0.0
             logging.debug("-----------------------------ROUGE ERROR-----------------------------")
             logging.debug(sentence)
             logging.debug(reference)
             logging.debug(references)
             logging.debug("---------------------------------------------------------------------")
-        scores.append(highlight_score)
 
-    if alpha == 1.0 and is_test:
-        return aggregate_test_scores(scores)
-    elif alpha == 0.0 and is_test:
-        return max(scores)
-
-    # If no scores were computed, return 0.0
-    if not scores or scores is None or len(scores) == 0:
-        return 0.0
-    # Based on the aggregation parameter select the right score
+        rouge_scores.append(rouge_score)
+        similarity_scores.append(similarity_score)
+    
     if aggregation == 'max':
-        label = max(scores)
+        aggregate = lambda x : max(x)
     elif aggregation == 'average':
-        label = sum(scores) / len(scores)
+        aggregate = lambda x : sum(x)/len(x)
     elif aggregation == 'harmonic':
-        label = statistics.harmonic_mean(scores)
+        aggregate = lambda x : statistics.harmonic_mean(x)
     else:
         # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
+    
+    #Similarity aggregation 
+    similarity_label = aggregate(similarity_scores)
 
-    return label
+    #Rouge aggregation
+
+    if is_test:
+        aggregate_rouge_scores = aggregate_test_scores(rouge_scores)
+        return aggregate_rouge_scores, similarity_label
+    else:
+        rouge_label = aggregate(rouge_scores)
+        return rouge_label, similarity_label
 
 
 def aggregate_test_scores(scores):

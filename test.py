@@ -7,30 +7,10 @@ import torch
 import numpy as np
 from multiprocessing import cpu_count
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
+from sentence_transformers import SentenceTransformer
 
 # If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
 # torch.backends.cuda.matmul.allow_tf32 = True
-
-
-# Initial setup: parser, logging...
-args = ArgsParser.parse_arguments()
-start_time = datetime.now()
-args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
-
-setup_logging(os.path.join(args.output_dir, "logs"), "info")
-make_deterministic(args.seed)
-logging.info(f"Arguments: {args}")
-logging.info(f"The outputs are being saved in {args.output_dir}")
-logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
-
-model_name = args.model_name_or_path
-tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-
-
-def tokenize_function(examples):
-    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding="max_length",
-                     return_tensors="pt")
-
 
 def evaluate_model(dataset, model, tokenizer, num_highlight=3):
     current_context = None
@@ -84,8 +64,11 @@ def evaluate_article(highlights_pred, highlights_gt):
     rouges = []
     semantic_similarities = []
     for h in highlights_pred:
-        rouges.append(compute_labels(h, highlights_gt, alpha=1.0, is_test=True))
-        semantic_similarities.append(compute_labels(h, highlights_gt, alpha=0.0, is_test=True))
+        rouge_score, similarity_score = compute_labels(h, highlights_gt, is_test=True, \
+                                                           similarity_model = similarity_model)
+        rouges.append(rouge_score)
+        semantic_similarities.append(similarity_score)
+
     return compute_avg_dict(rouges), np.mean(semantic_similarities)
 
 
@@ -102,40 +85,28 @@ def compute_avg_dict(dict_list):
 
     return avg_dict
 
-
-""" avg_dict = {}
-    rouge_1_f, rouge_2_f, rouge_l_f = 0, 0, 0
-    rouge_1_p, rouge_2_p, rouge_l_p = 0, 0, 0
-    rouge_1_r, rouge_2_r, rouge_l_r = 0, 0, 0
-    for dictionary in scores:
-        rouge_1_f += dictionary["rouge-1"]["f"]
-        rouge_2_f += dictionary["rouge-2"]["f"]
-        rouge_l_f += dictionary["rouge-l"]["f"]
-        rouge_1_p += dictionary["rouge-1"]["p"]
-        rouge_2_p += dictionary["rouge-2"]["p"]
-        rouge_l_p += dictionary["rouge-l"]["p"]
-        rouge_1_r += dictionary["rouge-1"]["r"]
-        rouge_2_r += dictionary["rouge-2"]["r"]
-        rouge_l_r += dictionary["rouge-l"]["r"]
-    # Compute the average
-    avg_dict["rouge-1"] = {"f": rouge_1_f / len(scores)}
-    avg_dict["rouge-2"] = {"f": rouge_2_f / len(scores)}
-    avg_dict["rouge-l"] = {"f": rouge_l_f / len(scores)}
-    avg_dict["rouge-1"]["p"] = rouge_1_p / len(scores)
-    avg_dict["rouge-2"]["p"] = rouge_2_p / len(scores)
-    avg_dict["rouge-l"]["p"] = rouge_l_p / len(scores)
-    avg_dict["rouge-1"]["r"] = rouge_1_r / len(scores)
-    avg_dict["rouge-2"]["r"] = rouge_2_r / len(scores)
-    avg_dict["rouge-l"]["r"] = rouge_l_r / len(scores)
-    return avg_dict"""
-
-
 def main():
-    num_labels = 1
+    
+    # Initial setup: parser, logging...
+    args = ArgsParser.parse_arguments()
+    start_time = datetime.now()
+    args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
 
+    setup_logging(os.path.join(args.output_dir, "logs"), "info")
+    make_deterministic(args.seed)
+    logging.info(f"Arguments: {args}")
+    logging.info(f"The outputs are being saved in {args.output_dir}")
+    logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
+    
+    model_name = args.model_name_or_path
+    
+    global similarity_model
+    
     logging.info("\n|-------------------------------------------------------------------------------------------|")
     logging.info(f"##### DOWNLOADING MODEL {model_name} #####")
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=1)
+    similarity_model = SentenceTransformer("all-MiniLM-L6-v2") 
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     model.to(torch.device("cuda:0"))
     model.eval()
     logging.info("\n|-------------------------------------------------------------------------------------------|")
@@ -148,7 +119,6 @@ def main():
                                          args.save_dataset_on_disk,
                                          args.output_dir,
                                          args.seed)
-    dataset_test.select(range(args.num_test_examples))
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
     logging.debug("##### EXAMPLE DATAPOINT #####")
