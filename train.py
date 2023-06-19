@@ -5,7 +5,9 @@ import ArgsParser
 from datetime import datetime
 import logging
 import torch
+import numpy as np
 from multiprocessing import cpu_count
+
 
 # If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
 # torch.backends.cuda.matmul.allow_tf32 = True
@@ -15,17 +17,20 @@ def tokenize_function(examples):
     return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding="max_length",
                      return_tensors="pt")
 
-def combine_labels(example):
 
-    rouge = example['rouge']
-    similarity = example['similarity']
-    label = alpha*rouge + (1-alpha)*similarity
+def combine_labels(example):
+    rouge = np.array(example['rouge'])
+    similarity = np.array(example['similarity'])
+
+    batch_size = len(rouge)  # desired size of the array
+    weight = np.full(batch_size, alpha, dtype=np.float16)
+    label = weight * rouge + (np.ones(batch_size) - weight) * similarity
     example['label'] = label
-    
     return example
 
+
 def main():
-# Initial setup: parser, logging...
+    # Initial setup: parser, logging...
     args = ArgsParser.parse_arguments()
     start_time = datetime.now()
     args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
@@ -36,8 +41,8 @@ def main():
     logging.info(f"Using {torch.cuda.device_count()} GPUs and {cpu_count()} CPUs")
     model_name = args.model_name_or_path
 
-    global tokenizer 
-    global alpha 
+    global tokenizer
+    global alpha
 
     alpha = args.alpha
 
@@ -49,15 +54,15 @@ def main():
 
     logging.info("##### PREPARING TRAIN, VAL, TEST DATASETS #####")
     dataset_train, dataset_val, _ = prepare_dataset(args.dataset_path,
-                                                               args.num_train_examples,
-                                                               args.num_val_examples,
-                                                               args.num_test_examples,
-                                                               args.save_dataset_on_disk,
-                                                               args.output_dir,                                                
-                                                               args.seed)
+                                                    args.num_train_examples,
+                                                    args.num_val_examples,
+                                                    args.num_test_examples,
+                                                    args.save_dataset_on_disk,
+                                                    args.output_dir,
+                                                    args.seed)
 
-    ###### #Change the labels to the desired combination    
-    
+    ###### #Change the labels to the desired combination
+
     dataset_train = dataset_train.map(combine_labels, batched=True)
     dataset_val = dataset_val.map(combine_labels, batched=True)
 

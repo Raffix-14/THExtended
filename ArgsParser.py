@@ -24,8 +24,7 @@ def parse_arguments():
     parser.add_argument("--alpha", type=float, default=1.0, help="Penalty weight for the semantic-aware loss")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--save_dataset_on_disk", type=int, default=0)
-    parser.add_argument("--push_to_hub", type=int, default=0,
-                        help="Push model checkpoints to the Hub if set to true")
+    parser.add_argument("--push_to_hub", type=int, default=0, help="Push model checkpoints to the Hub if set to true")
     ########################################
     args = parser.parse_args()
 

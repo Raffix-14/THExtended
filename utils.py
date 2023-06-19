@@ -26,8 +26,6 @@ from transformers.utils import logging as loggingTransformer
 from transformers import TrainerCallback
 from sentence_transformers import util as util_st
 
-similarity_model = load('bertscore')
-
 
 def clean_dataset(dataset, num_samples, seed=42):
     nlp = spacy.load("en_core_web_lg")
@@ -135,7 +133,7 @@ def prepare_dataset(dataset_path=None,
 
     if train_dataset is None or val_dataset is None or test_dataset is None:
         logging.info("Loading CNN DailyMail dataset from Hugging Face Hub")
-        raw_dataset = load_dataset("cnn_dailymail", "3.0.0", num_proc=cpu_count())
+        raw_dataset = load_dataset("cnn_dailymail", "3.0.0")
 
         # Apply cleaning and parsing steps to training dataset
         if train_dataset is None:
@@ -146,7 +144,7 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'train')
                 logging.info(f"Saving dataset TRAIN split to {data_path}")
-                train_dataset.save_to_disk(data_path, num_proc=cpu_count())
+                train_dataset.save_to_disk(data_path)
 
         # Apply cleaning and parsing steps to validation dataset
         if val_dataset is None:
@@ -157,7 +155,7 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'validation')
                 logging.info(f"Saving dataset VALIDATION split to {data_path}")
-                val_dataset.save_to_disk(data_path, num_proc=cpu_count())
+                val_dataset.save_to_disk(data_path)
 
         # Apply cleaning and parsing steps to test dataset
         if test_dataset is None:
@@ -168,58 +166,89 @@ def prepare_dataset(dataset_path=None,
             if save_flag:
                 data_path = os.path.join(dataset_path, 'test')
                 logging.info(f"Saving dataset TEST split to {data_path}")
-                test_dataset.save_to_disk(data_path, num_proc=cpu_count())
+                test_dataset.save_to_disk(data_path)
     return train_dataset, val_dataset, test_dataset
 
 
-def compute_labels(sentence, references, similarity_model = None, aggregation='max', is_test=False):
+def compute_rouges(sentences, references, aggregation='max', is_test=False):
+    rouges, tmp_rouges = [], []
 
-    
-    # Skip empty sentences or sentences without words
-    if not sentence.strip() or not any(char.isalpha() for char in sentence):
-        return 0.0, 0.0
-
-    rouge_scores, similarity_scores = list(),list()    # List of rouge and similiraty scores for each highlight
-    
-    # Compute ROUGE scores between the sentence and each highlight
-    for reference in references:
-        try:        #THE TWO CASES MUST BE CONSIDERED SEPARETELY
-            rouge_score = Rouge().get_scores(sentence, reference) if is_test else Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
-            similarity_score = util_st.pytorch_cos_sim(similarity_model.encode(sentence,convert_to_tensor = True),\
-                                                       similarity_model.encode(reference, convert_to_tensor = True)).item()   
-        except:
-            rouge_score = 0.0
-            similarity_score = 0.0
-            logging.debug("-----------------------------ROUGE ERROR-----------------------------")
-            logging.debug(sentence)
-            logging.debug(reference)
-            logging.debug(references)
-            logging.debug("---------------------------------------------------------------------")
-
-        rouge_scores.append(rouge_score)
-        similarity_scores.append(similarity_score)
-    
     if aggregation == 'max':
-        aggregate = lambda x : max(x)
+        aggregate_f = lambda x: max(x)
     elif aggregation == 'average':
-        aggregate = lambda x : sum(x)/len(x)
+        aggregate_f = lambda x: sum(x) / len(x)
     elif aggregation == 'harmonic':
-        aggregate = lambda x : statistics.harmonic_mean(x)
+        aggregate_f = lambda x: statistics.harmonic_mean(x)
     else:
         # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
-    
-    #Similarity aggregation 
-    similarity_label = aggregate(similarity_scores)
 
-    #Rouge aggregation
+    for sentence in sentences:
+        # Skip empty sentences or sentences without words
+        if not sentence.strip() or not any(char.isalpha() for char in sentence):
+            if is_test:
+                rouges.append(
+                    {
+                        "rouge-1": {"f": 0.0, "p": 0.0, "r": 0.0},
+                        "rouge-2": {"f": 0.0, "p": 0.0, "r": 0.0},
+                        "rouge-l": {"f": 0.0, "p": 0.0, "r": 0.0}
+                    })
+            else:
+                rouges.append(0.0)
+            continue
+        for reference in references:
+            if is_test:
+                try:
+                    rouge_score = Rouge().get_scores(sentence, reference)[0]
+                except:
+                    rouge_score = {
+                        "rouge-1": {"f": 0.0, "p": 0.0, "r": 0.0},
+                        "rouge-2": {"f": 0.0, "p": 0.0, "r": 0.0},
+                        "rouge-l": {"f": 0.0, "p": 0.0, "r": 0.0}
+                    }
+                    logging.debug("-----------------------------ROUGE ERROR-----------------------------")
+                    logging.debug(sentence)
+                    logging.debug(reference)
+                    logging.debug(references)
+                    logging.debug("---------------------------------------------------------------------")
+            else:
+                try:
+                    rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+                except:
+                    rouge_score = 0.0
+                    logging.debug("-----------------------------ROUGE ERROR-----------------------------")
+                    logging.debug(sentence)
+                    logging.debug(reference)
+                    logging.debug(references)
+                    logging.debug("---------------------------------------------------------------------")
 
-    if is_test:
-        aggregate_rouge_scores = aggregate_test_scores(rouge_scores)
-        return aggregate_rouge_scores, similarity_label
+            tmp_rouges.append(rouge_score)
+
+        # Rouge aggregation
+        if is_test:
+            aggregated_rouges = aggregate_test_scores(tmp_rouges)
+            rouges.append(aggregated_rouges)
+        else:
+            rouges.append(aggregate_f(tmp_rouges))
+    return rouges
+
+
+def compute_similarities(sentences, references, similarity_model=None, aggregation='max'):
+    with torch.no_grad():
+        embeddings1 = similarity_model.encode(sentences, convert_to_tensor=True, show_progress_bar=False)
+        embeddings2 = similarity_model.encode(references, convert_to_tensor=True, show_progress_bar=False)
+    cosine_scores = util_st.cos_sim(embeddings1, embeddings2)
+
+    if aggregation == 'max':
+        similarities = torch.max(cosine_scores, dim=1)[0]
+    elif aggregation == 'average':
+        similarities = torch.mean(cosine_scores, dim=1)
+    elif aggregation == 'harmonic':
+        similarities = 1 / torch.mean(torch.reciprocal(cosine_scores), dim=1)
     else:
-        rouge_label = aggregate(rouge_scores)
-        return rouge_label, similarity_label
+        # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
+        raise ValueError(f"Invalid aggregation parameter: {aggregation}")
+    return similarities.tolist()
 
 
 def aggregate_test_scores(scores):
@@ -419,7 +448,6 @@ def setup_logging(save_dir, console="debug", info_filename="info.log", debug_fil
         console_handler.setFormatter(base_formatter)
         logger.addHandler(console_handler)
         loggerTransformer.addHandler(console_handler)
-        loggerDatasets.addHandler(console_handler)
 
     def exception_handler(type_, value, tb):
         logger.info("\n" + "".join(traceback.format_exception(type_, value, tb)))
