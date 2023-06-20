@@ -261,6 +261,7 @@ def aggregate_test_scores(scores):
         rouge_2_f = dictionary["rouge-2"]["f"]
         if rouge_2_f >= max_rouge_2_f:
             best_dict = dictionary
+            max_rouge_2_f = rouge_2_f
     return best_dict
 
 
