@@ -61,14 +61,11 @@ def main():
                                                     args.output_dir,
                                                     args.seed)
 
-    ###### #Change the labels to the desired combination
+    dataset_train = dataset_train.map(combine_labels, batched=True, desc="Combining labels for train")
+    dataset_val = dataset_val.map(combine_labels, batched=True, desc="Combining labels for val")
 
-    dataset_train = dataset_train.map(combine_labels, batched=True)
-    dataset_val = dataset_val.map(combine_labels, batched=True)
-
-    dataset_train_tked = dataset_train.map(tokenize_function, batched=True)
-    dataset_val_tked = dataset_val.map(tokenize_function, batched=True)
-    # dataset_test = dataset_test.map(preprocess_function, batched=True)
+    dataset_train_tked = dataset_train.map(tokenize_function, batched=True, desc="Tokenizing train")
+    dataset_val_tked = dataset_val.map(tokenize_function, batched=True, desc="Tokenizing val")
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
     logging.debug("##### EXAMPLE DATAPOINT #####")

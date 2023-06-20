@@ -15,7 +15,8 @@ def parse_arguments():
     parser.add_argument("--num_train_examples", type=int, default=3000, help="Number of training documents")
     parser.add_argument("--num_val_examples", type=int, default=500, help="Number of evaluation documents")
     parser.add_argument("--num_test_examples", type=int, default=500, help="Number of test documents")
-
+    parser.add_argument("--num_highlights", type=int, default=3,
+                        help="Number of highlights to extract and use for testing")
     parser.add_argument("--model_name_or_path", type=str, default='bert-base-uncased',
                         help='Path to pretrained encoder model or model identifier from huggingface.co/models')
     parser.add_argument("--output_dir", type=str, default="out_tmp", help="Path to save checkpoints and logs")

@@ -8,17 +8,22 @@ import numpy as np
 from multiprocessing import cpu_count
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 
 
 # If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
 # torch.backends.cuda.matmul.allow_tf32 = True
 
-def evaluate_model(dataset, model, tokenizer, num_highlight=3):
+def evaluate_model(dataset, model, tokenizer, args):
+    num_highlights = args.num_highlights
     current_context = None
     current_article_sentences = []
-    current_highlight = None
+    current_highlights = None
     rouges = []
     similarities = []
+
+    progress_bar = tqdm(total=args.num_test_examples)
+    progress_bar.set_description("Evaluating article")
 
     for example in dataset:
         sentence = example['sentence']
@@ -30,13 +35,14 @@ def evaluate_model(dataset, model, tokenizer, num_highlight=3):
             # Process previous article
             if current_context is not None:
                 ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-                rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlight], current_highlight)
+                rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlights], current_highlights)
                 rouges.append(rouge_dict)
                 similarities.append(similarity)
+                progress_bar.update(1)
 
             # Start a new article
             current_context = context
-            current_highlight = highlights
+            current_highlights = highlights
             current_article_sentences = []
 
         # Append sentence to current article
@@ -45,10 +51,12 @@ def evaluate_model(dataset, model, tokenizer, num_highlight=3):
     # Process the last article
     if current_context is not None:
         ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-        rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlight], current_highlight)
+        rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlights], current_highlights)
         rouges.append(rouge_dict)
         similarities.append(similarity)
+        progress_bar.update(1)
 
+    progress_bar.close()
     return compute_avg_dict(rouges), np.mean(similarities)
 
 
