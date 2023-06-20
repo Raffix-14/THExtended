@@ -25,7 +25,7 @@ def combine_labels(example):
     batch_size = len(rouge)  # desired size of the array
     weight = np.full(batch_size, alpha, dtype=np.float16)
     label = weight * rouge + (np.ones(batch_size) - weight) * similarity
-    example['label'] = label
+    example['labels'] = label
     return example
 
 

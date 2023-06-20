@@ -253,32 +253,15 @@ def compute_similarities(sentences, references, similarity_model=None, aggregati
 
 def aggregate_test_scores(scores):
     # Initialize variables to keep track of maximum "f" and corresponding dictionaries
-    max_rouge_1_f = 0.0
-    max_rouge_1_dict = None
-
     max_rouge_2_f = 0.0
-    max_rouge_2_dict = None
-
-    max_rouge_l_f = 0.0
-    max_rouge_l_dict = None
+    best_dict = {}
 
     # Iterate through the list of dictionaries
     for dictionary in scores:
-        rouge_1_f = dictionary["rouge-1"]["f"]
-        if rouge_1_f >= max_rouge_1_f:
-            max_rouge_1_f = rouge_1_f
-            max_rouge_1_dict = dictionary["rouge-1"]
-
         rouge_2_f = dictionary["rouge-2"]["f"]
         if rouge_2_f >= max_rouge_2_f:
-            max_rouge_2_f = rouge_2_f
-            max_rouge_2_dict = dictionary["rouge-2"]
-
-        rouge_l_f = dictionary["rouge-l"]["f"]
-        if rouge_l_f >= max_rouge_l_f:
-            max_rouge_l_f = rouge_l_f
-            max_rouge_l_dict = dictionary["rouge-l"]
-    return {"rouge-1": max_rouge_1_dict, "rouge-2": max_rouge_2_dict, "rouge-l": max_rouge_l_dict}
+            best_dict = dictionary
+    return best_dict
 
 
 def get_scores(sentences, context, model, tokenizer):
