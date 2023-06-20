@@ -120,7 +120,7 @@ def main():
     logging.debug("|-------------------------------------------------------------------------------------------|")
 
     logging.info("##### EVALUATING MODEL #####")
-    results = evaluate_model(dataset_test, model, tokenizer)
+    results = evaluate_model(dataset_test, model, tokenizer, args)
     for key, value in results[0].items():
         logging.info(f"{key}: {value}")
     logging.info(f"Mean semantic similarity: {results[1]}")
