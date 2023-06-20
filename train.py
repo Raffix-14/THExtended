@@ -94,7 +94,7 @@ def main():
         num_train_epochs=args.epochs_num,
         fp16=True,
         learning_rate=args.lr,
-        optim="adamw_torch",
+        optim="adamw_torch_fused",
         disable_tqdm=False,
         save_safetensors=True,
         **default_args
