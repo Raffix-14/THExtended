@@ -14,8 +14,7 @@ from multiprocessing import cpu_count
 
 
 def tokenize_function(examples):
-    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding="max_length",
-                     return_tensors="pt")
+    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", return_tensors="pt")
 
 
 def combine_labels(example):
@@ -77,7 +76,7 @@ def main():
     default_args = {
         "output_dir": model_out_dir,
         "evaluation_strategy": "steps",
-        "eval_steps": 0.5,
+        "eval_steps": 995,
         "save_strategy": "epoch",
         "seed": args.seed,
         "log_level": "passive",
