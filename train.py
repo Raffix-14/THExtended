@@ -14,7 +14,7 @@ from multiprocessing import cpu_count
 
 
 def tokenize_function(examples):
-    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", return_tensors="pt")
+    return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding=True, return_tensors="pt")
 
 
 def combine_labels(example):
@@ -65,6 +65,13 @@ def main():
 
     dataset_train_tked = dataset_train.map(tokenize_function, batched=True, desc="Tokenizing train")
     dataset_val_tked = dataset_val.map(tokenize_function, batched=True, desc="Tokenizing val")
+
+    dataset_train_tked = dataset_train_tked.remove_columns(["sentence","context","highlights","rouge","similarity"])
+    dataset_val_tked = dataset_val_tked.remove_columns(["sentence","context","highlights","rouge","similarity"])
+
+    dataset_train_tked.set_format(type="torch", columns=["input_ids", "token_type_ids", "attention_mask", "labels"])
+    dataset_val_tked.set_format(type="torch", columns=["input_ids", "token_type_ids", "attention_mask", "labels"])
+    
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
     logging.debug("##### EXAMPLE DATAPOINT #####")
@@ -106,6 +113,7 @@ def main():
         tokenizer=tokenizer,
         callbacks=[LogCallback]
     )
+    model.train()
     trainer.train()
 
     final_str = "##### FINAL RESULTS #####"
