@@ -171,7 +171,9 @@ def prepare_dataset(dataset_path=None,
 
 
 def compute_rouges(sentences, references, aggregation='max', is_test=False):
-    rouges, tmp_rouges = [], []
+    
+    rouges = []
+    rouge_model = Rouge()
 
     if aggregation == 'max':
         aggregate_f = lambda x: max(x)
@@ -184,6 +186,7 @@ def compute_rouges(sentences, references, aggregation='max', is_test=False):
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
 
     for sentence in sentences:
+        tmp_rouges = []
         # Skip empty sentences or sentences without words
         if not sentence.strip() or not any(char.isalpha() for char in sentence):
             if is_test:
@@ -199,7 +202,7 @@ def compute_rouges(sentences, references, aggregation='max', is_test=False):
         for reference in references:
             if is_test:
                 try:
-                    rouge_score = Rouge().get_scores(sentence, reference)[0]
+                    rouge_score = rouge_model.get_scores(sentence, reference)[0]
                 except:
                     rouge_score = {
                         "rouge-1": {"f": 0.0, "p": 0.0, "r": 0.0},
@@ -213,7 +216,7 @@ def compute_rouges(sentences, references, aggregation='max', is_test=False):
                     logging.debug("---------------------------------------------------------------------")
             else:
                 try:
-                    rouge_score = Rouge().get_scores(sentence, reference)[0]["rouge-2"]['f']
+                    rouge_score = rouge_model.get_scores(sentence, reference)[0]["rouge-2"]['f']
                 except:
                     rouge_score = 0.0
                     logging.debug("-----------------------------ROUGE ERROR-----------------------------")
