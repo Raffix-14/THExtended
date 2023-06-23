@@ -85,9 +85,12 @@ def main():
         "evaluation_strategy": "steps",
         "eval_steps": 995,
         "save_strategy": "epoch",
-        "seed": args.seed,
+        "logging_strategy": "steps",
+        "logging_steps": 995,
+        "logging_first_step": True
         "log_level": "passive",
         "log_level_replica": "passive",
+        "seed": args.seed,
         "report_to": "none"
     }
 
