@@ -66,6 +66,10 @@ def main():
     dataset_train_tked = dataset_train.map(tokenize_function, batched=True, desc="Tokenizing train")
     dataset_val_tked = dataset_val.map(tokenize_function, batched=True, desc="Tokenizing val")
 
+    logging.debug("##### EXAMPLE DATAPOINT #####")
+    logging.debug(dataset_train_tked[0])
+    logging.debug("|-------------------------------------------------------------------------------------------|")
+    
     dataset_train_tked = dataset_train_tked.remove_columns(["sentence","context","highlights","rouge","similarity"])
     dataset_val_tked = dataset_val_tked.remove_columns(["sentence","context","highlights","rouge","similarity"])
 
@@ -74,7 +78,7 @@ def main():
     
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
-    logging.debug("##### EXAMPLE DATAPOINT #####")
+    logging.debug("##### EXAMPLE DATAPOINT FED INTO THE MODEL #####")
     logging.debug(dataset_train_tked[0])
     logging.debug("|-------------------------------------------------------------------------------------------|")
 
