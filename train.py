@@ -91,7 +91,7 @@ def main():
         "save_strategy": "epoch",
         "logging_strategy": "steps",
         "logging_steps": 995,
-        "logging_first_step": True
+        "logging_first_step": True,
         "log_level": "passive",
         "log_level_replica": "passive",
         "seed": args.seed,
