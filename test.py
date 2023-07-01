@@ -2,7 +2,7 @@ import ArgsParser
 import logging
 import os
 from datetime import datetime
-from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_similarities, compute_rouges
+from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_similarities, compute_rouges, compute_mrr_single_doc
 import torch
 import numpy as np
 from multiprocessing import cpu_count
@@ -21,6 +21,7 @@ def evaluate_model(dataset, model, tokenizer, args):
     current_highlights = None
     rouges = []
     similarities = []
+    mrrs = []
 
     progress_bar = tqdm(total=args.num_test_examples)
     progress_bar.set_description("Evaluating article")
@@ -35,9 +36,10 @@ def evaluate_model(dataset, model, tokenizer, args):
             # Process previous article
             if current_context is not None:
                 ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-                rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlights], current_highlights)
+                rouge_dict, similarity, mrr = evaluate_article(ranked_sents[:num_highlights], current_highlights)
                 rouges.append(rouge_dict)
                 similarities.append(similarity)
+                mrrs.append(mrr)
                 progress_bar.update(1)
 
             # Start a new article
@@ -51,19 +53,21 @@ def evaluate_model(dataset, model, tokenizer, args):
     # Process the last article
     if current_context is not None:
         ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
-        rouge_dict, similarity = evaluate_article(ranked_sents[:num_highlights], current_highlights)
+        rouge_dict, similarity, mrr = evaluate_article(ranked_sents[:num_highlights], current_highlights)
         rouges.append(rouge_dict)
         similarities.append(similarity)
+        mrrs.append(mrr)
         progress_bar.update(1)
 
     progress_bar.close()
-    return compute_avg_dict(rouges), np.mean(similarities)
+    return compute_avg_dict(rouges), np.mean(similarities), np.mean(mrrs)
 
 
 def evaluate_article(highlights_pred, highlights_gt):
     rouges = compute_rouges(highlights_pred, highlights_gt, is_test=True)
     semantic_similarities = compute_similarities(highlights_pred, highlights_gt, similarity_model)
-    return compute_avg_dict(rouges), np.mean(semantic_similarities)
+    mrr = compute_mrr_single_doc(highlights_pred, highlights_gt)
+    return compute_avg_dict(rouges), np.mean(semantic_similarities), mrr
 
 
 def compute_avg_dict(dict_list):
@@ -124,6 +128,7 @@ def main():
     for key, value in results[0].items():
         logging.info(f"{key}: {value}")
     logging.info(f"Mean semantic similarity: {results[1]}")
+    logging.info(f"Mean reciprocal rank: {results[2]}")
     logging.info("\n|-------------------------------------------------------------------------------------------|")
 
 
