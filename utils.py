@@ -18,6 +18,7 @@ import traceback
 import numpy as np
 from os.path import join
 from rouge import Rouge
+import difflib
 from multiprocessing import cpu_count
 import statistics
 from datasets import load_dataset, load_from_disk
@@ -258,7 +259,7 @@ def compute_mrr_single_doc(sents_pred, sents_gt):
 
     for gt_highlight in sents_gt:
         for rank, item in enumerate(sents_pred, start=1):
-            if item == gt_highlight:
+            if is_similar_string(item, gt_highlight):
                 reciprocal_ranks.append(1 / rank)
                 break
 
@@ -266,6 +267,18 @@ def compute_mrr_single_doc(sents_pred, sents_gt):
         return max(reciprocal_ranks)
     else:
         return 0.0
+
+def is_similar_string(string1, string2):
+    # Substring matching
+    if string1 in string2 or string2 in string1:
+        return True
+    
+    # Fuzzy matching
+    ratio = difflib.SequenceMatcher(None, string1, string2).ratio()
+    if ratio >= 0.8:  # Adjust the threshold as needed
+        return True
+    
+    return False
 
 def aggregate_test_scores(scores):
     # Initialize variables to keep track of maximum "f" and corresponding dictionaries
