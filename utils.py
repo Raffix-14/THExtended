@@ -253,6 +253,19 @@ def compute_similarities(sentences, references, similarity_model=None, aggregati
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
     return similarities.tolist()
 
+def compute_mrr_single_doc(sents_pred, sents_gt):
+    reciprocal_ranks = []
+
+    for gt_highlight in sents_gt:
+        for rank, item in enumerate(sents_pred, start=1):
+            if item == gt_highlight:
+                reciprocal_ranks.append(1 / rank)
+                break
+
+    if reciprocal_ranks:
+        return max(reciprocal_ranks)
+    else:
+        return 0.0
 
 def aggregate_test_scores(scores):
     # Initialize variables to keep track of maximum "f" and corresponding dictionaries
