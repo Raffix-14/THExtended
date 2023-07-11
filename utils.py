@@ -312,6 +312,18 @@ def get_scores(sentences, context, model, tokenizer):
     return sorted_sentences, sorted_scores
 
 
+def trigram_blocking(sentences):
+    summary = []
+    trigrams_summary = set()
+
+    for sentence in sentences:
+        sentence_trigrams = set(ngrams(sentence.lower().split(), 3))
+        if not trigrams_summary.intersection(sentence_trigrams):
+            summary.append(sentence)
+            trigrams_summary.update(sentence_trigrams)
+
+    return summary
+
 class Explorer:
 
     def __init__(self, dataset):
