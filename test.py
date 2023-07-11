@@ -2,7 +2,7 @@ import ArgsParser
 import logging
 import os
 from datetime import datetime
-from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_similarities, compute_rouges, compute_mrr_single_doc
+from utils import setup_logging, make_deterministic, prepare_dataset, get_scores, compute_similarities, compute_rouges, compute_mrr_single_doc, trigram_blocking
 import torch
 import numpy as np
 from multiprocessing import cpu_count
@@ -36,6 +36,7 @@ def evaluate_model(dataset, model, tokenizer, args):
             # Process previous article
             if current_context is not None:
                 ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
+                ranked_sents = trigram_blocking(ranked_sents) if args.trigram_blocking == 1 else ranked_sents
                 rouge_dict, similarity, mrr = evaluate_article(ranked_sents[:num_highlights], current_highlights)
                 rouges.append(rouge_dict)
                 similarities.append(similarity)
@@ -53,6 +54,7 @@ def evaluate_model(dataset, model, tokenizer, args):
     # Process the last article
     if current_context is not None:
         ranked_sents, ranked_scores = get_scores(current_article_sentences, current_context, model, tokenizer)
+        ranked_sents = trigram_blocking(ranked_sents) if args.trigram_blocking == 1 else ranked_sents
         rouge_dict, similarity, mrr = evaluate_article(ranked_sents[:num_highlights], current_highlights)
         rouges.append(rouge_dict)
         similarities.append(similarity)
