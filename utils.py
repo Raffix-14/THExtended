@@ -26,6 +26,7 @@ from datasets.utils import logging as loggingDatasets
 from transformers.utils import logging as loggingTransformer
 from transformers import TrainerCallback
 from sentence_transformers import util as util_st
+from nltk import ngrams
 
 
 def clean_dataset(dataset, num_samples, seed=42):
