@@ -9,15 +9,21 @@ import numpy as np
 from multiprocessing import cpu_count
 
 
-# If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
-# torch.backends.cuda.matmul.allow_tf32 = True
-
-
 def tokenize_function(examples):
+    """
+    Tokenize the sentence and the context
+    :param examples: the dataset
+    :return: the dataset with the tokenized sentence and context
+    """
     return tokenizer(examples["sentence"], examples["context"], truncation="only_second", padding=True, return_tensors="pt")
 
 
 def combine_labels(example):
+    """
+    Combine rouge and similarity scores to create a single label
+    :param example: the dataset
+    :return: the dataset with the combined labels
+    """
     rouge = np.array(example['rouge'])
     similarity = np.array(example['similarity'])
 
@@ -29,7 +35,9 @@ def combine_labels(example):
 
 
 def main():
-    # Initial setup: parser, logging...
+    """
+    Main function for training the model
+    """
     args = ArgsParser.parse_arguments()
     start_time = datetime.now()
     args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))
@@ -98,7 +106,7 @@ def main():
         "report_to": "none"
     }
 
-    # OPTIMIZED PARAMETERS TRAINING
+    # Optimized parameters training
     training_args = TrainingArguments(
         per_device_train_batch_size=args.train_batch_size,
         per_device_eval_batch_size=args.train_batch_size,

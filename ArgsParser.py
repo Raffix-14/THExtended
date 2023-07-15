@@ -1,5 +1,11 @@
 import argparse
 
+"""
+    This file contains the arguments parser for the THExtended project.
+    The arguments are divided into two categories: training and testing.
+    The training arguments are used to train the model, while the testing arguments are used to test the model.
+    The arguments are parsed using the argparse library.
+"""
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="THExtended - Extractive Summarization",
@@ -28,10 +34,5 @@ def parse_arguments():
     parser.add_argument("--push_to_hub", type=int, default=0, help="Push model checkpoints to the Hub if set to 1")
     parser.add_argument("--trigram_blocking", type=int, default=0, help="Apply trigram blocking technique during testing if set to 1")
 
-    ########################################
     args = parser.parse_args()
-
-    """parser.add_argument("--criterion", type=str, default='triplet', help='loss to be used',
-                        choices=["triplet", "sare_ind", "sare_joint"])
-    parser.add_argument("--trunc_te", type=int, default=None, choices=list(range(0, 14)))"""
     return args

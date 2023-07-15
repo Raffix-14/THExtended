@@ -10,11 +10,15 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-
-# If the GPU is based on the nvdia Ampere architecture uncomment this line as it speed-up training up to 3x reducing memory footprint
-# torch.backends.cuda.matmul.allow_tf32 = True
-
 def evaluate_model(dataset, model, tokenizer, args):
+    """
+    Evaluate the model on the test set
+    :param dataset: the test set
+    :param model: the model
+    :param tokenizer: the tokenizer
+    :param args: the arguments passed through command line
+    :return: the average rouge scores, the average semantic similarity scores, the average mrr scores
+    """
     num_highlights = args.num_highlights
     current_context = None
     current_article_sentences = []
@@ -66,6 +70,12 @@ def evaluate_model(dataset, model, tokenizer, args):
 
 
 def evaluate_article(highlights_pred, highlights_gt):
+    """
+    Evaluate the model on a single article
+    :param highlights_pred: the predicted highlights
+    :param highlights_gt: the ground truth highlights
+    :return: the average rouge scores, the average semantic similarity scores, the average mrr scores
+    """
     rouges = compute_rouges(highlights_pred, highlights_gt, is_test=True)
     semantic_similarities = compute_similarities(highlights_pred, highlights_gt, similarity_model)
     mrr = compute_mrr_single_doc(highlights_pred, highlights_gt)
@@ -73,7 +83,11 @@ def evaluate_article(highlights_pred, highlights_gt):
 
 
 def compute_avg_dict(dict_list):
-    # Iterate through the list of dictionaries
+    """
+    Compute the average of values contained in dictionaries in a list
+    :param dict_list: the list of dictionaries
+    :return: the average dictionary
+    """
     avg_dict = {}
     keys = ["rouge-1", "rouge-2", "rouge-l"]
     metrics = ["f", "p", "r"]
@@ -87,7 +101,9 @@ def compute_avg_dict(dict_list):
 
 
 def main():
-    # Initial setup: parser, logging...
+    """
+    Main function for testing
+    """
     args = ArgsParser.parse_arguments()
     start_time = datetime.now()
     args.output_dir = os.path.join(args.output_dir, start_time.strftime('%Y-%m-%d_%H-%M-%S'))

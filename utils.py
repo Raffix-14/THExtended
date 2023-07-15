@@ -30,13 +30,21 @@ from nltk import ngrams
 
 
 def clean_dataset(dataset, num_samples, seed=42):
+    """
+    Clean the dataset, removing the bad samples
+    :param dataset: the dataset to clean
+    :param num_samples: the number of samples to return
+    :param seed: the seed for the random generator
+    :return: the cleaned dataset
+    """
+
     nlp = spacy.load("en_core_web_lg")
+    
     # Shuffle the dataset, so you can be sure you're not selecting the first contiguous data points
     ds = dataset.shuffle(seed=seed)
-    # Create the cleaned ds and init the index
+    
     cleaned_ds = []
     i = -1
-    # Thresholds
     before_th = 40
 
     # Start looping on the shuffled ds and collect the good, cleaned samples
@@ -47,9 +55,9 @@ def clean_dataset(dataset, num_samples, seed=42):
         data_point = ds[i]
         article = data_point["article"]
         highlights = nlp(data_point["highlights"])
-
         cleaned_high = ""
         n_highlight = 0
+
         # For each hl, check whether to discard it
         for current_h in highlights.sents:
             if len(current_h.text.split(" ")) > 3 and any(char.isalpha() for char in current_h.text):
@@ -58,26 +66,24 @@ def clean_dataset(dataset, num_samples, seed=42):
                     cleaned_high += "\n"
                 cleaned_high += current_h.text.replace("\n", "").strip()
 
-        if 3 <= n_highlight <= 5:  # If the highlights are more than 3 and less than 5 is good.
-            data_point['highlights'] = cleaned_high  # Updating the 'highlights' field of the considered data_point.
+        if 3 <= n_highlight <= 5:  
+            data_point['highlights'] = cleaned_high  
         else:
             continue
 
-        # Check if "--" is in the article
+        # Check if metadata is present and in case remove it.
         if "--" in article:
-            # Check the length of the text before the "--"; if it's less than a threshold, remove it from the article
             text_before, text_after = article.split("--", 1)
             if len(text_before) <= before_th:
                 article = text_after
                 data_point["article"] = article
-        # Now do the same with "(CNN)"
         if "(CNN)" in article:
             text_before, text_after = article.split("(CNN)", 1)
             if len(text_before) <= before_th:
                 article = text_after
                 data_point["article"] = article
 
-        # ADDITIONAL CLEANING: SOMETIMES THE ARTICLES HAVE A BEGINNING LIKE word . word word . word .
+        # Additional cleaning of weird patterns
         splits = article.split(".")
         for j, split in enumerate(splits):
             words = [word for word in split.split() if not any(char.isdigit() for char in word)]
@@ -88,13 +94,10 @@ def clean_dataset(dataset, num_samples, seed=42):
                 data_point['article'] = article
                 break
 
-        ###########################################################################################
-
-        # Finally, filter out articles that are too short
+        # Filter out short articles
         if len(article) < 300:
             continue
 
-        # Append the data point to the cleaned ds
         cleaned_ds.append(data_point)
 
     return Dataset.from_pandas(pd.DataFrame(data=cleaned_ds))
@@ -107,6 +110,18 @@ def prepare_dataset(dataset_path=None,
                     save_flag=0,
                     save_dir=None,
                     seed=42):
+    """
+    Prepare the dataset
+    :param dataset_path: the path to the dataset
+    :param num_train_examples: the number of examples to use for training
+    :param num_val_examples: the number of examples to use for validation
+    :param num_test_examples: the number of examples to use for testing
+    :param save_flag: whether to save the dataset or not
+    :param save_dir: the directory where to save the dataset
+    :param seed: the seed for the random generator
+    :return: the training, validation and test dataset
+    """
+
     from DataParser import DataParser
     train_dataset, val_dataset, test_dataset = None, None, None
 
@@ -173,6 +188,14 @@ def prepare_dataset(dataset_path=None,
 
 
 def compute_rouges(sentences, references, aggregation='max', is_test=False):
+    """
+    Compute ROUGE scores for a list of sentences and a list of references
+    :param sentences: the list of sentences
+    :param references: the list of references
+    :param aggregation: the aggregation function to use for the ROUGE scores
+    :param is_test: whether the dataset is the test dataset or not
+    :return: the ROUGE scores
+    """
     
     rouges = []
     rouge_model = Rouge()
@@ -184,7 +207,6 @@ def compute_rouges(sentences, references, aggregation='max', is_test=False):
     elif aggregation == 'harmonic':
         aggregate_f = lambda x: statistics.harmonic_mean(x)
     else:
-        # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
 
     for sentence in sentences:
@@ -239,6 +261,15 @@ def compute_rouges(sentences, references, aggregation='max', is_test=False):
 
 
 def compute_similarities(sentences, references, similarity_model=None, aggregation='max'):
+    """
+    Compute similarities scores between a list of sentences and a list of references
+    :param sentences: the list of sentences
+    :param references: the list of references
+    :param similarity_model: the similarity model to use
+    :param aggregation: the aggregation function to use for the similarities
+    :return: the similarities scores
+    """
+
     with torch.no_grad():
         embeddings1 = similarity_model.encode(sentences, convert_to_tensor=True, show_progress_bar=False)
         embeddings2 = similarity_model.encode(references, convert_to_tensor=True, show_progress_bar=False)
@@ -251,11 +282,16 @@ def compute_similarities(sentences, references, similarity_model=None, aggregati
     elif aggregation == 'harmonic':
         similarities = 1 / torch.mean(torch.reciprocal(cosine_scores), dim=1)
     else:
-        # If an invalid value is provided for `aggregation`, a `ValueError` is raised.
         raise ValueError(f"Invalid aggregation parameter: {aggregation}")
     return similarities.tolist()
 
 def compute_mrr_single_doc(sents_pred, sents_gt):
+    """
+    Compute the MRR scores for a single article
+    :param sents_pred: the list of predicted sentences
+    :param sents_gt: the list of ground truth sentences
+    :return: the MRR score
+    """
     reciprocal_ranks = []
 
     for gt_highlight in sents_gt:
@@ -270,23 +306,34 @@ def compute_mrr_single_doc(sents_pred, sents_gt):
         return 0.0
 
 def is_similar_string(string1, string2):
+    """
+    Check if two strings are similar
+    :param string1: the first string
+    :param string2: the second string
+    :return: True if the strings are similar, False otherwise
+    """
+
     # Substring matching
     if string1 in string2 or string2 in string1:
         return True
     
     # Fuzzy matching
     ratio = difflib.SequenceMatcher(None, string1, string2).ratio()
-    if ratio >= 0.8:  # Adjust the threshold as needed
+    if ratio >= 0.8: 
         return True
     
     return False
 
 def aggregate_test_scores(scores):
-    # Initialize variables to keep track of maximum "f" and corresponding dictionaries
+    """
+    Aggregate the ROUGE scores of the test set
+    :param scores: the list of ROUGE scores
+    :return: the aggregated ROUGE scores
+    """
+
     max_rouge_2_f = 0.0
     best_dict = {}
 
-    # Iterate through the list of dictionaries
     for dictionary in scores:
         rouge_2_f = dictionary["rouge-2"]["f"]
         if rouge_2_f >= max_rouge_2_f:
@@ -296,12 +343,17 @@ def aggregate_test_scores(scores):
 
 
 def get_scores(sentences, context, model, tokenizer):
+    """
+    Compute the scores of the sentences and rank them according to their scores
+    :param sentences: the list of sentences
+    :param context: the context
+    :param model: the model to use
+    :param tokenizer: the tokenizer to use
+    :return: the sorted sentences and their scores
+    """
+
     context_list = [context] * len(sentences)
     inputs = tokenizer(sentences, context_list, truncation="only_second", padding="max_length", return_tensors="pt")
-    # Print each article separately
-    # for x in inputs["input_ids"]:
-    # logging.debug(tokenizer.decode(x))
-    # logging.debug("---------------------------------------------------------------------")
     inputs.to(torch.device("cuda:0"))
     with torch.no_grad():
         outputs = model(**inputs)
@@ -314,6 +366,11 @@ def get_scores(sentences, context, model, tokenizer):
 
 
 def trigram_blocking(sentences):
+    """
+    Perform trigram blocking on the sentences
+    :param sentences: the list of sentences
+    :return: the list of sentences after trigram blocking
+    """
     summary = []
     trigrams_summary = set()
 
@@ -326,7 +383,9 @@ def trigram_blocking(sentences):
     return summary
 
 class Explorer:
-
+    """
+    Class to explore the dataset
+    """
     def __init__(self, dataset):
         self.nlp = spacy.load('en_core_web_lg')
         self.ds = dataset
@@ -344,6 +403,12 @@ class Explorer:
 
     @staticmethod
     def create_sections(sentences):
+        """
+        Create three sections from the sentences
+        :param sentences: the list of sentences
+        :return: the three sections
+        """
+
         # Compute the index ranges for each bucket
         n = len(sentences)
         cut1 = ceil(n / 3)
@@ -355,19 +420,26 @@ class Explorer:
         return [section1, section2, section3]
 
     def compute_similarity(self, article, section):
+        """
+        Compute the similarity between the article and the section
+        :param article: the article
+        :param section: the section
+        :return: the similarity score
+        """
         return self.bertscore.compute(predictions=[section], references=[article],
                                       model_type="allenai/longformer-base-4096")
 
     @staticmethod
     def plot_similarities(similarities):
+        """
+        Plot the similarities using boxplots
+        :param similarities: the similarities
+        """
 
-        # Boxplots
-        # Convert the dictionary to a DataFrame
         df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in similarities.items()]))
-        # Melt the DataFrame to a long format
         df = df.melt(var_name='Section', value_name='Similarity')
-        # Set the theme
         sns.set_theme(style="whitegrid")
+        
         # Create the boxplots
         plt.figure(figsize=(10, 7))
         sns.boxplot(x='Section', y='Similarity', data=df, palette="Set3")
@@ -377,12 +449,10 @@ class Explorer:
         plt.ylim(0, 1)
         plt.show()
 
-        # Heatmap
-        # Convert the dictionary to a DataFrame and transpose it
+        # Transform the data
         df = pd.DataFrame(similarities)
 
         sns.set_theme()
-
         plt.figure(figsize=(10, 7))
         sns.heatmap(df, annot=False, cmap="YlGnBu")
         plt.title('Similarities by Section and Article', fontsize=20)
@@ -391,7 +461,9 @@ class Explorer:
         plt.show()
 
     def explore(self):
-        # For each data point
+        """
+        Explore the dataset
+        """
         start = time.time()
         similarities = defaultdict(list)
         for data_point in tqdm(self.ds, desc=" Iterating cleaned dataset"):
@@ -416,16 +488,12 @@ class Explorer:
 
 
 def setup_logging(save_dir, console="debug", info_filename="info.log", debug_filename="debug.log"):
-    """Set up logging files and console output.
-    Creates one file for INFO logs and one for DEBUG logs.
-    Args:
-        save_dir (str): creates the folder where to save the files.
-        console (str):
-            if == "debug" prints on console debug messages and higher
-            if == "info"  prints on console info messages and higher
-            if == None does not use console (useful when a logger has already been set)
-        info_filename (str): the name of the info file. if None, don't create info file
-        debug_filename (str): the name of the debug file. if None, don't create debug file
+    """
+    Setup logging to log to console and to file `save_dir/debug.log`
+    :param save_dir: the directory to save the log files
+    :param console: the console level
+    :param info_filename: the info log filename
+    :param debug_filename: the debug log filename
     """
     if os.path.exists(save_dir):
         raise FileExistsError(f"{save_dir} already exists!")
@@ -493,8 +561,9 @@ class LogCallback(TrainerCallback):
 
 
 def make_deterministic(seed=0):
-    """Make results deterministic. If seed == -1, do not make deterministic.
-    Running the script in a deterministic way might slow it down.
+    """
+    Make the run deterministic
+    :param seed: the seed
     """
     if seed == -1:
         return
