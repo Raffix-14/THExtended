@@ -31,7 +31,7 @@ pip install -U sentence-transformers
 
 ### Pretrained models on 🤗 Hub:
 
-- [Alpha = 0.5](https://huggingface.co/Raffix/THExtended_alpha_05) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_05` (**Best Model**)
+- [Alpha = 0.5](https://huggingface.co/Raffix/THExtended_alpha_05) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_05` &nbsp; &nbsp; &nbsp;(**Best Model**)
 - [Alpha = 1.0](https://huggingface.co/Raffix/THExtended_alpha_1) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_1`
 - [Alpha = 0.75](https://huggingface.co/Raffix/THExtended_alpha_075) &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_075`
 - [Alpha = 0.25](https://huggingface.co/Raffix/THExtended_alpha_025) &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_025`
