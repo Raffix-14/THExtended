@@ -31,9 +31,13 @@ pip install -U sentence-transformers
 
 ### Pretrained models on 🤗 Hub:
 
-- [Alpha = 0.5](https://huggingface.co/Raffix/THExtended_alpha_05) `Raffix/THExtended_alpha_05` (**Best Model**)
-- [Alpha = 1.0](https://huggingface.co/Raffix/THExtended_alpha_1) `Raffix/THExtended_alpha_1`
+- [Alpha = 0.5](https://huggingface.co/Raffix/THExtended_alpha_05) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_05` (**Best Model**)
+- [Alpha = 1.0](https://huggingface.co/Raffix/THExtended_alpha_1) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_1`
+- [Alpha = 0.75](https://huggingface.co/Raffix/THExtended_alpha_075) &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_075`
+- [Alpha = 0.25](https://huggingface.co/Raffix/THExtended_alpha_025) &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_025`
+- [Alpha = 0.0](https://huggingface.co/Raffix/THExtended_alpha_0) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_0`
 
+https://huggingface.co/Raffix/THExtended_alpha_0
 ### Preprocessed dataset on 🤗 Hub:
 - [Dataset](https://huggingface.co/datasets/Raffix/cnndm_10k_semantic_rouge_labels) `Raffix/cnndm_10k_semantic_rouge_labels`
 ### Using pretrained models
