@@ -37,7 +37,6 @@ pip install -U sentence-transformers
 - [Alpha = 0.25](https://huggingface.co/Raffix/THExtended_alpha_025) &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_025`
 - [Alpha = 0.0](https://huggingface.co/Raffix/THExtended_alpha_0) &nbsp; &nbsp; &nbsp; &nbsp; `Raffix/THExtended_alpha_0`
 
-https://huggingface.co/Raffix/THExtended_alpha_0
 ### Preprocessed dataset on 🤗 Hub:
 - [Dataset](https://huggingface.co/datasets/Raffix/cnndm_10k_semantic_rouge_labels) `Raffix/cnndm_10k_semantic_rouge_labels`
 ### Using pretrained models
